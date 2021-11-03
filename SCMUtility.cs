@@ -1,15 +1,17 @@
 // Copyright (c) iQubit Inc. All rights reserved.
 // Use of this source code is governed by a GPL-v3 license
 
-/// <summary>
-/// Source Control Manager Application
-/// This name coz we might wanna support other version control systems in future
-/// </summary>
 namespace SCMApp {
   using System;
   using LibGit2Sharp;
   using LibGit2Sharp.Handlers;
   using System.Threading.Tasks;
+
+  /// <summary> Source Control Manager Application
+  /// This name coz we might wanna support other version control systems in future
+  /// </summary>
+  internal static class NamespaceDoc {
+  }
 
   class GitUtility {
     public enum SCMAction {
@@ -106,8 +108,6 @@ namespace SCMApp {
     }
 
     async Task PushChanges(Repository repo, bool shouldForce = false) {
-      Console.WriteLine("staging..");
-
       // Add only modified files
       var statusOps = new StatusOptions();
       statusOps.IncludeIgnored = false;
@@ -130,7 +130,8 @@ namespace SCMApp {
             }
         }
 
-      Console.WriteLine("commiting..");
+      Console.WriteLine("changes staged");
+
       // show single line instead
       var message = ShowCommitMessage(@"D:\git_ws\commit_log.txt");
 
@@ -143,6 +144,7 @@ namespace SCMApp {
       Signature committer = author;
       var targetBranch = "dev";
 
+      bool hasCommitFailed = false;
       // Commit to the repository
       try {
         Console.WriteLine("author name: " + author.Name);
@@ -156,18 +158,17 @@ namespace SCMApp {
         if (repo.Head.Tip == repo.Branches[originBranchStr].Tip)
           return ;
 
-        foreach(Branch b in repo.Branches)
-          if (b.IsRemote)
-            Console.WriteLine(string.Format("{0}{1}", b.IsCurrentRepositoryHead ? "*" : " ", b.FriendlyName + ": " + b.Tip));
+        hasCommitFailed = true;
       }
 
-      Console.WriteLine("pushing to remote..");
+      if (!hasCommitFailed)
+        Console.WriteLine("committed");
+
       PushOptions options = new PushOptions();
       options.CredentialsProvider = credManager.GetCredentials();
 
       try {
-        var localBranch = repo.Branches[targetBranch];
-        repo.Network.Push(localBranch, options);
+        repo.Network.Push(repo.Branches[targetBranch], options);
       }
       catch (System.NullReferenceException) {
         Console.WriteLine("Probably attempting push to wrong branch!");
@@ -179,10 +180,17 @@ namespace SCMApp {
       }
       catch(LibGit2SharpException e) {
         Console.WriteLine("Probable authentication error: " + e.Message);
+
+        // stuffs to help debugging
+        Console.WriteLine("Canonical name: " + repo.Branches[targetBranch].CanonicalName);
+
+        var remote = repo.Network.Remotes["origin"];
+        Console.WriteLine("URL: " + remote.Url);
+        Console.WriteLine("Push URL: " + remote.PushUrl);
         return ;
       }
 
-      Console.WriteLine("done");
+      Console.WriteLine("pushed");
     }
 
     /// <summary>

@@ -13,7 +13,7 @@ namespace SCMApp {
   internal static class NamespaceDoc {
   }
 
-  class GitUtility {
+  internal class GitUtility {
     public enum SCMAction {
       ShowInfo,
       PushModified,
@@ -22,9 +22,9 @@ namespace SCMApp {
     };
 
     /// <summary>
-    /// Repository Dir Path
+    /// Repository Instance
     /// </summary>
-    private string RepoPath { get; set; }
+    private Repository Repo { get; set; }
     /// <summary>
     /// What Git Action to perform
     /// </summary>
@@ -33,6 +33,10 @@ namespace SCMApp {
     /// Single file path or pattern files for adding
     /// </summary>
     private string FilePath { get; set; }
+    /// <summary>
+    /// Configuration Instance
+    /// </summary>
+    private JsonConfig Config { get; set; }
 
     public GitUtility(SCMAction action, string repoPath, string filePath) {
       if (string.IsNullOrEmpty(repoPath))
@@ -40,59 +44,83 @@ namespace SCMApp {
       else if (! System.IO.Directory.Exists(repoPath))
         throw new ArgumentException("Provide repository path does not exist!");
 
+      try {
+        Repo = new Repository(repoPath);
+      }
+      catch (RepositoryNotFoundException e) {
+        Console.WriteLine("Repo dir: " + repoPath);
+        Console.WriteLine(e.Message);
+      }
+ 
       Action = action;
-      RepoPath = repoPath;
+      
       FilePath = filePath;
+      if (string.IsNullOrEmpty(FilePath) == false)
+      {
+        if (FilePath.StartsWith(repoPath))
+          FilePath = FilePath.Substring(repoPath.Length + 1);
+
+        var prePath = @"input\posts";
+        if (repoPath.EndsWith(@"statiq\note") && FilePath.EndsWith(".md"))
+          FilePath = prePath + '\\' + FilePath;
+      }
+
+      Config = null;
     }
 
     /// <summary>
-    /// probably attach to push single
-    /// args preprocessing
+    /// Get short commit sha id: 9 alpha digits
     /// </summary>
-    private bool ValidateCommandLine() {
-      if (string.IsNullOrEmpty(FilePath) == false)
-      {
-        if (FilePath.StartsWith(RepoPath))
-          FilePath = FilePath.Substring(RepoPath.Length + 1);
+    private string GetShaShort() => Repo.Head.Tip.Id.ToString().Substring(0, 9);
 
-        var prePath = @"input\posts";
-        if (RepoPath.EndsWith(@"statiq\note") && FilePath.EndsWith(".md"))
-          FilePath = prePath + '\\' + FilePath;
-      }
-      return true;
-    }
-
-    string GetShaShort(Repository repo) => repo.Head.Tip.Id.ToString().Substring(0, 9);
-
-    void ShowUserInfo(Repository repo) {
-      Console.WriteLine("Local Repo: " + RepoPath);
-      var username = repo.Config.Get<string>("user.name").Value;
+    private void ShowUserInfo() {
+      Console.WriteLine("Local Repo: " + Repo.Info);
+      var username = Repo.Config.Get<string>("user.name").Value;
       Console.WriteLine("Author: " + username);
-      var email = repo.Config.Get<string>("user.email").Value;
+      var email = Repo.Config.Get<string>("user.email").Value;
       Console.WriteLine("Email: " + email);
-      Console.WriteLine("Branch: " + repo.Head);
-      Console.WriteLine("SHA: " + GetShaShort(repo));
+      Console.WriteLine("Branch: " + Repo.Head);
+      Console.WriteLine("SHA: " + GetShaShort());
     }
 
-    void ShowStatus(Repository repo) {
-      ShowUserInfo(repo);
+    private async Task InstantiateJsonConfig() {
+      if (Config == null) {
+        Config = new JsonConfig();
+        await Config.Load(Repo.Config.Get<string>("user.name").Value, Repo.Config.
+          Get<string>("user.email").Value, Repo.Info.Path);
+      }
+    }
+
+    private async Task ShowStatus() {
+      ShowUserInfo();
 
       var statusOps = new StatusOptions();
       statusOps.IncludeIgnored = false;
 
-      foreach (var item in repo.RetrieveStatus(statusOps))
+      foreach (var item in Repo.RetrieveStatus(statusOps))
         Console.WriteLine(" " + item.FilePath + ": " + item.State);
 
       Console.WriteLine(Environment.NewLine + "Commit message:");
-      Console.WriteLine(GetCommitMessage(@"D:\git_ws\commit_log.txt") + Environment.NewLine);
+
+      await InstantiateJsonConfig();
+      var msg = GetCommitMessage();
+
+      Console.WriteLine(msg + Environment.NewLine);
     }
 
     /// <summary>
     /// Get commit message from commit log file
     /// </summary>
-    private string GetCommitMessage(string path) => System.IO.File.ReadAllText(path);
+    private string GetCommitMessage() {
+      var commitFilePath = Config.GetCommitFilePath();
+      if (!System.IO.File.Exists(commitFilePath)) {
+        throw new InvalidOperationException($"Log file: {commitFilePath} not found!");
+      }
 
-    async Task PullChanges(Repository repo) {
+      return System.IO.File.ReadAllText(commitFilePath);
+    }
+
+    private async Task PullChanges() {
       // Credential information to fetch
       PullOptions options = new PullOptions();
       options.FetchOptions = new FetchOptions();
@@ -100,20 +128,18 @@ namespace SCMApp {
           (url, usernameFromUrl, types) =>
               new DefaultCredentials());
 
-      var credManager = new CredManager();
-      await credManager.LoadConfig(repo.Config.Get<string>("user.name").Value, repo.Config.
-        Get<string>("user.email").Value, RepoPath);
-      var signature = credManager.GetSignature();
+      await InstantiateJsonConfig();
+      var signature = Config.GetSignature();
       try {
-        Commands.Pull(repo, signature, options); 
+        Commands.Pull(Repo, signature, options); 
       }
       catch (CheckoutConflictException e) {
           Console.WriteLine(e.Message);
       }
-      Console.WriteLine($"{repo.Head} -> {GetShaShort(repo)}");
+      Console.WriteLine($"{Repo.Head} -> {GetShaShort()}");
     }
 
-    async Task PushChanges(Repository repo, bool shouldForce = false) {
+    private async Task PushChanges(bool shouldForce = false) {
       // Add only modified files
       var statusOps = new StatusOptions();
       statusOps.IncludeIgnored = false;
@@ -121,45 +147,41 @@ namespace SCMApp {
       if (string.IsNullOrEmpty(FilePath) == false) {
         Console.WriteLine("* add " + FilePath);
         // Stage the file
-        repo.Index.Add(FilePath);
-        repo.Index.Write();
+        Repo.Index.Add(FilePath);
+        Repo.Index.Write();
       }
       else
-        foreach (var item in repo.RetrieveStatus(statusOps))
+        foreach (var item in Repo.RetrieveStatus(statusOps))
         {
             if (item.State == FileStatus.ModifiedInWorkdir)
             {
               Console.WriteLine("adding " + item.FilePath);
               // Stage the file
-              repo.Index.Add(item.FilePath);
-              repo.Index.Write();
+              Repo.Index.Add(item.FilePath);
+              Repo.Index.Write();
             }
         }
 
       Console.WriteLine("changes staged");
 
-      var credManager = new CredManager();
-      await credManager.LoadConfig(repo.Config.Get<string>("user.name").Value, repo.Config.
-        Get<string>("user.email").Value, RepoPath);
-
+      await InstantiateJsonConfig();
       // Create the committer's signature and commit
-      Signature author = credManager.GetSignature();
+      Signature author = Config.GetSignature();
       Signature committer = author;
       var targetBranch = "dev";
 
-      var commitMessage = GetCommitMessage(@"D:\git_ws\commit_log.txt");
       bool hasCommitFailed = false;
       // Commit to the repository
       try {
         Console.WriteLine("author name: " + author.Name);
-        Commit commit = repo.Commit(commitMessage, author, committer);
+        Commit commit = Repo.Commit(GetCommitMessage(), author, committer);
       }
       catch (EmptyCommitException) {
         // Not implemented: no change found, but previous commit was not pushed to remote yet
         Console.WriteLine("Not creating new commit.");
 
         var originBranchStr = "origin/" + targetBranch;
-        if (repo.Head.Tip == repo.Branches[originBranchStr].Tip)
+        if (Repo.Head.Tip == Repo.Branches[originBranchStr].Tip)
           return ;
 
         hasCommitFailed = true;
@@ -169,10 +191,11 @@ namespace SCMApp {
         Console.WriteLine("committed");
 
       PushOptions options = new PushOptions();
-      options.CredentialsProvider = credManager.GetCredentials();
+      // Config is instantiated already before commit.
+      options.CredentialsProvider = Config.GetCredentials();
 
       try {
-        repo.Network.Push(repo.Branches[targetBranch], options);
+        Repo.Network.Push(Repo.Branches[targetBranch], options);
       }
       catch (System.NullReferenceException) {
         Console.WriteLine("Probably attempting push to wrong branch!");
@@ -186,9 +209,9 @@ namespace SCMApp {
         Console.WriteLine("Probable authentication error: " + e.Message);
 
         // stuffs to help debugging
-        Console.WriteLine("Canonical name: " + repo.Branches[targetBranch].CanonicalName);
+        Console.WriteLine("Canonical name: " + Repo.Branches[targetBranch].CanonicalName);
 
-        var remote = repo.Network.Remotes["origin"];
+        var remote = Repo.Network.Remotes["origin"];
         Console.WriteLine("URL: " + remote.Url);
         Console.WriteLine("Push URL: " + remote.PushUrl);
         return ;
@@ -204,38 +227,26 @@ namespace SCMApp {
     ///  https://stackoverflow.com/q/105372
     /// </summary>
     public async Task Run() {
-      if (ValidateCommandLine() == false)
-        return ;
+      switch (Action) {
+      case SCMAction.ShowInfo:
+        ShowUserInfo();
+        break;
 
-      try {
-        using (var repo = new Repository(RepoPath)) {
+      case SCMAction.ShowStatus:
+        await ShowStatus();
+        break;
 
-          switch (Action) {
-          case SCMAction.ShowInfo:
-            ShowUserInfo(repo);
-            break;
+      case SCMAction.Pull:
+        await PullChanges();
+        break;
 
-          case SCMAction.ShowStatus:
-            ShowStatus(repo);
-            break;
+      case SCMAction.PushModified:
+        await PushChanges();
+        break;
 
-          case SCMAction.Pull:
-            await PullChanges(repo);
-            break;
-
-          case SCMAction.PushModified:
-            await PushChanges(repo);
-            break;
-
-          default:
-            Console.WriteLine("Unknown Action specified!");
-            break;
-          }
-        }
-      }
-      catch (RepositoryNotFoundException e) {
-        Console.WriteLine("Repo dir: " + RepoPath);
-        Console.WriteLine(e.Message);
+      default:
+        Console.WriteLine("Unknown Action specified!");
+        break;
       }
     }
   }

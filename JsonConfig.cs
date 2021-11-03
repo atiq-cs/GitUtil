@@ -12,44 +12,53 @@ namespace SCMApp {
   /// Provides
   /// - signature for commits
   /// - identity for pushes
+  /// - provide commit log file path
   /// - performs some validation checks
   /// </summary>
-  class CredManager {
+  class JsonConfig {
+    private UserCredential UserCred {get; set; }
     /// <summary>
     /// Github user name for example, 'coolgeek'
     /// </summary>
-    private string UserName { get; set; }
+    private string JsonConfigFilePath { get; set; }
+
+
+    public JsonConfig() {
+      JsonConfigFilePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+        + @"\GitUtilConfig.json";
+
+      if (!System.IO.File.Exists(JsonConfigFilePath)) {
+        throw new InvalidOperationException($"Required config: {JsonConfigFilePath} not found!");
+      }
+    }
+
+    /// <summary>
+    /// Structure to read json config
+    /// </summary>
+    class UserCredential {
+    /// <summary>
+    /// Github user name for example, 'coolgeek'
+    /// </summary>
+      public string UserName { get; set; }
     /// <summary>
     /// Actual Name for example, 'Esther Arkin' 
     /// </summary>
-    private string FullName { get; set; }
-    private string Email { get; set; }
-    /// <summary>
-    /// Github Token
-    /// </summary>
-    private string GHToken { get; set; }
-
-    public CredManager() {
-    }
-
-    // required structure to read json config
-    class RepoCred {
-      public string UserName { get; set; }
       public string FullName { get; set; }
       public string Email { get; set; }
       public string GithubToken { get; set; }
+      public string CommitLogFilePath { get; set; }
       public HashSet<string> Dirs { get; set; }
     }
 
-
-    public async Task LoadConfig(string repoFullName, string repoEmail, string RepoPath) {
-      var appDataDir = System.IO.Directory.GetParent(Environment.GetFolderPath(Environment.
-        SpecialFolder.ApplicationData)) + @"\Local";
-
-      string filePath = appDataDir + @"\GitUtilConfig.json";
-      // Console.WriteLine(filePath);
-      using System.IO.FileStream openStream = System.IO.File.OpenRead(filePath);
-      var root = await JsonSerializer.DeserializeAsync<Dictionary<string, RepoCred>>(openStream);
+    /// <summary>
+    /// <remarks>
+    /// ref,
+    ///  https://docs.microsoft.com/en-us/dotnet/api/system.environment.specialfolder
+    /// </remarks>
+    /// </summary>
+    public async Task Load(string repoFullName, string repoEmail, string RepoPath) {
+      using System.IO.FileStream openStream = System.IO.File.OpenRead(JsonConfigFilePath);
+      var root = await JsonSerializer.DeserializeAsync<Dictionary<string, UserCredential>>(openStream);
 
       if (! root.ContainsKey("default")) {
         throw new InvalidOperationException("Invalid json config file: default cred missing!");
@@ -59,30 +68,22 @@ namespace SCMApp {
         throw new InvalidOperationException("Invalid json config file: specified cred missing!");
       }
 
-      var defaultCred = root["default"];
-      UserName = defaultCred.UserName;
-      FullName = defaultCred.FullName;
-      Email = defaultCred.Email;
-      GHToken = defaultCred.GithubToken;
-
+      UserCred = root["default"];
       var spCred = root["specified"];
       var dirList = spCred.Dirs;
 
       if (dirList.Contains(RepoPath)) {
         Console.WriteLine("Setting specified config for this repository.");
-        UserName = spCred.UserName;
-        FullName = spCred.FullName;
-        Email = spCred.Email;
-        GHToken = spCred.GithubToken;
+
+        UserCred = spCred;
       }
 
-      if (repoFullName != FullName || repoEmail != Email)
+      if (repoFullName != UserCred.FullName || repoEmail != UserCred.Email)
         throw new InvalidOperationException("Inavlid user name or email in git config!");
     }
 
     public Signature GetSignature() {
-      // ShowUserInfo(repo);
-      var signature = new Signature(new Identity(FullName, Email), DateTimeOffset.Now);
+      var signature = new Signature(new Identity(UserCred.FullName, UserCred.Email), DateTimeOffset.Now);
       return signature;
     }
 
@@ -92,14 +93,16 @@ namespace SCMApp {
     /// ref, https://docs.microsoft.com/en-us/dotnet/standard/serialization/system-text-json-how-to
     /// </summary>
     public CredentialsHandler GetCredentials() {
-      Console.WriteLine($"{UserName} and {GHToken}");
+      Console.WriteLine($"{UserCred.UserName} and {UserCred.GithubToken}");
 
       return new CredentialsHandler(
           (url, usernameFromUrl, types) => new UsernamePasswordCredentials()
           {
-            Username = UserName,
-            Password = GHToken
+            Username = UserCred.UserName,
+            Password = UserCred.GithubToken
           });
     }
+
+    public string GetCommitFilePath() => UserCred.CommitLogFilePath;
   }
 }

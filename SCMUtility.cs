@@ -83,8 +83,14 @@ namespace SCMApp {
       foreach (var item in repo.RetrieveStatus(statusOps))
         Console.WriteLine(" " + item.FilePath + ": " + item.State);
 
-      ShowCommitMessage(@"D:\git_ws\commit_log.txt");
+      Console.WriteLine(Environment.NewLine + "Commit message:");
+      Console.WriteLine(GetCommitMessage(@"D:\git_ws\commit_log.txt") + Environment.NewLine);
     }
+
+    /// <summary>
+    /// Get commit message from commit log file
+    /// </summary>
+    private string GetCommitMessage(string path) => System.IO.File.ReadAllText(path);
 
     async Task PullChanges(Repository repo) {
       // Credential information to fetch
@@ -132,9 +138,6 @@ namespace SCMApp {
 
       Console.WriteLine("changes staged");
 
-      // show single line instead
-      var message = ShowCommitMessage(@"D:\git_ws\commit_log.txt");
-
       var credManager = new CredManager();
       await credManager.LoadConfig(repo.Config.Get<string>("user.name").Value, repo.Config.
         Get<string>("user.email").Value, RepoPath);
@@ -144,11 +147,12 @@ namespace SCMApp {
       Signature committer = author;
       var targetBranch = "dev";
 
+      var commitMessage = GetCommitMessage(@"D:\git_ws\commit_log.txt");
       bool hasCommitFailed = false;
       // Commit to the repository
       try {
         Console.WriteLine("author name: " + author.Name);
-        Commit commit = repo.Commit(message, author, committer);
+        Commit commit = repo.Commit(commitMessage, author, committer);
       }
       catch (EmptyCommitException) {
         // Not implemented: no change found, but previous commit was not pushed to remote yet
@@ -192,17 +196,6 @@ namespace SCMApp {
 
       Console.WriteLine("pushed");
     }
-
-    /// <summary>
-    /// Show commit message from file
-    /// </summary>
-    string ShowCommitMessage(string path) {
-      Console.WriteLine(Environment.NewLine + "Commit message:");
-      var msg = System.IO.File.ReadAllText(path);
-      Console.WriteLine(msg + Environment.NewLine);
-      return msg;
-    }
-
 
     /// <summary>
     /// Automaton of the app

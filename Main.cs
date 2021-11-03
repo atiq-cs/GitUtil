@@ -3,7 +3,6 @@
 
 namespace SCMApp {
   using System.Threading.Tasks;
-  using System;
   using System.CommandLine;
 
   class SCMAppMain {
@@ -18,18 +17,7 @@ namespace SCMApp {
     static async Task Main(string[] args) {
       var rootCommand = new RootCommand("");
 
-      var infoCommand = new Command("info", "Show information about repository");
-      var rpOption = new Option<string>("--repo-path", "Path of the repo");
-      infoCommand.AddOption(rpOption);
-      infoCommand.Handler = System.CommandLine.Invocation.CommandHandler
-        .Create<string>(async (repoPath) =>
-      {
-        await RunSCM(GitUtility.SCMAction.ShowInfo, repoPath);
-      });
-
-      rootCommand.AddCommand(infoCommand);
-
-      var pushCommand = new Command("push", "commit and push");
+      var pushCommand = new Command("push", "Commit and push");
       var pushModCmd = new Command("mod", "type of push");
       pushModCmd.AddAlias("modified");
       var amendOption = new Option<string>("--amend", "whether to amend last commit and add current changes");
@@ -42,10 +30,11 @@ namespace SCMApp {
         await RunSCM(GitUtility.SCMAction.PushModified, repoPath);
       });
 
+      var rpOption = new Option<string>("--repo-path", "Path of the repo");
       pushModCmd.AddOption(rpOption);
       rootCommand.AddCommand(pushCommand);
 
-      var pullCommand = new Command("pull", "Show information about repository");
+      var pullCommand = new Command("pull", "Pull changes from repository");
       pullCommand.AddOption(rpOption);
       pullCommand.Handler = System.CommandLine.Invocation.CommandHandler
         .Create<string>(async (repoPath) =>
@@ -53,6 +42,26 @@ namespace SCMApp {
         await RunSCM(GitUtility.SCMAction.Pull, repoPath);
       });
       rootCommand.AddCommand(pullCommand);
+
+      var infoCommand = new Command("info", "Show information about repository");
+      infoCommand.AddAlias("information");
+      infoCommand.AddOption(rpOption);
+      infoCommand.Handler = System.CommandLine.Invocation.CommandHandler
+        .Create<string>(async (repoPath) =>
+      {
+        await RunSCM(GitUtility.SCMAction.ShowInfo, repoPath);
+      });
+      rootCommand.AddCommand(infoCommand);
+
+      var statusCommand = new Command("status", "Show status on changes/message");
+      statusCommand.AddAlias("stat");
+      statusCommand.AddOption(rpOption);
+      statusCommand.Handler = System.CommandLine.Invocation.CommandHandler
+        .Create<string>(async (repoPath) =>
+      {
+        await RunSCM(GitUtility.SCMAction.ShowStatus, repoPath);
+      });
+      rootCommand.AddCommand(statusCommand);
 
       await rootCommand.InvokeAsync(args);
     }

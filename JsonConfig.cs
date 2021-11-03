@@ -60,17 +60,21 @@ namespace SCMApp {
       using System.IO.FileStream openStream = System.IO.File.OpenRead(JsonConfigFilePath);
       var root = await JsonSerializer.DeserializeAsync<Dictionary<string, UserCredential>>(openStream);
 
-      if (! root.ContainsKey("default")) {
-        throw new InvalidOperationException("Invalid json config file: default cred missing!");
-      }
+      if (! root.ContainsKey("default"))
+        throw new InvalidOperationException($"Invalid json config file '{JsonConfigFilePath}': field " +
+          "'default' missing!");
 
-      if (! root.ContainsKey("specified")) {
-        throw new InvalidOperationException("Invalid json config file: specified cred missing!");
-      }
+      if (! root.ContainsKey("specified"))
+        throw new InvalidOperationException($"Invalid json config file '{JsonConfigFilePath}': field " +
+          "'specified' missing!");
 
       UserCred = root["default"];
       var spCred = root["specified"];
       var dirList = spCred.Dirs;
+      if (dirList == null) {
+        throw new InvalidOperationException($"Invalid json config file '{JsonConfigFilePath}': field "
+        + "'Dirs' missing!");
+      }
 
       if (dirList.Contains(RepoPath)) {
         Console.WriteLine("Setting specified config for this repository.");

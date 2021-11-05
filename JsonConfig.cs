@@ -28,7 +28,8 @@ namespace SCMApp {
         + @"\GitUtilConfig.json";
 
       if (!System.IO.File.Exists(JsonConfigFilePath)) {
-        throw new InvalidOperationException($"Required config: {JsonConfigFilePath} not found!");
+        throw new InvalidOperationException($"Required config: {JsonConfigFilePath} not found!" + 
+          "Please create the config file and run this application again.");
       }
     }
 
@@ -85,12 +86,6 @@ namespace SCMApp {
       if (repoFullName != UserCred.FullName || repoEmail != UserCred.Email)
         throw new InvalidOperationException("Inavlid user name or email in git config!");
     }
-
-    public Signature GetSignature() {
-      var signature = new Signature(new Identity(UserCred.FullName, UserCred.Email), DateTimeOffset.Now);
-      return signature;
-    }
-
 
     /// <summary>
     /// Read Credentials from json file

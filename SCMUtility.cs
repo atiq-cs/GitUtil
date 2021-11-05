@@ -14,6 +14,9 @@ namespace SCMApp {
   }
 
   internal class GitUtility {
+  /// <summary> ref for enumeration,
+  ///  https://stackoverflow.com/q/105372
+  /// </summary>
     public enum SCMAction {
       ShowInfo,
       PushModified,
@@ -73,8 +76,25 @@ namespace SCMApp {
     /// </summary>
     private string GetShaShort() => Repo.Head.Tip.Id.ToString().Substring(0, 9);
 
-    private void ShowUserInfo() {
-      Console.WriteLine("Local Repo: " + Repo.Info);
+    /// <summary>
+    /// Get rid of the suffix from git repo path
+    /// Otherwise output string comes as following,
+    ///  "D:\Code\CoolApp\.git\"
+    /// After trimming suffix it becomes,
+    ///  "D:\Code\CoolApp"
+    /// </summary>
+    private string GetRepoPath() {
+      var repoPath = Repo.Info.WorkingDirectory;
+      if (repoPath == null)
+        throw new NotImplementedException($"Most likely a bare repository: {Repo.Info.Path}. It is" + 
+        " not tested with this app yet.");
+
+      return repoPath.Substring(0, repoPath.Length-1);
+    }
+
+
+    public void ShowRepoAndUserInfo() {
+      Console.WriteLine("Local Repo: " + GetRepoPath());
       var username = Repo.Config.Get<string>("user.name").Value;
       Console.WriteLine("Author: " + username);
       var email = Repo.Config.Get<string>("user.email").Value;
@@ -87,40 +107,49 @@ namespace SCMApp {
       if (Config == null) {
         Config = new JsonConfig();
         await Config.Load(Repo.Config.Get<string>("user.name").Value, Repo.Config.
-          Get<string>("user.email").Value, Repo.Info.Path);
+          Get<string>("user.email").Value, GetRepoPath());
       }
     }
 
-    private async Task ShowStatus() {
-      ShowUserInfo();
+    public async Task ShowStatus() {
+      ShowRepoAndUserInfo();
 
       var statusOps = new StatusOptions();
       statusOps.IncludeIgnored = false;
 
+      Console.WriteLine(Environment.NewLine + "Local changes:");
       foreach (var item in Repo.RetrieveStatus(statusOps))
-        Console.WriteLine(" " + item.FilePath + ": " + item.State);
+        Console.WriteLine((item.State == FileStatus.ModifiedInWorkdir? "*": " ") + " " + item.FilePath);
 
-      Console.WriteLine(Environment.NewLine + "Commit message:");
+      Console.WriteLine(Environment.NewLine + "Commit message (local log file):");
 
       await InstantiateJsonConfig();
-      var msg = GetCommitMessage();
+      var msg = GetCommitMessage(singleLine: false);
 
       Console.WriteLine(msg + Environment.NewLine);
     }
 
     /// <summary>
     /// Get commit message from commit log file
+    /// ref for single line read: read-first-line-of-a-text-file-c-sharp
+    ///  https://stackoverflow.com/q/52598516
     /// </summary>
-    private string GetCommitMessage() {
+    private string GetCommitMessage(bool singleLine = true) {
       var commitFilePath = Config.GetCommitFilePath();
       if (!System.IO.File.Exists(commitFilePath)) {
         throw new InvalidOperationException($"Log file: {commitFilePath} not found!");
       }
 
-      return System.IO.File.ReadAllText(commitFilePath);
+      if (singleLine)
+        // Open the file to read from
+        using (System.IO.StreamReader sr = System.IO.File.OpenText(commitFilePath)) {
+            return sr.ReadLine();;
+        }
+      else
+        return System.IO.File.ReadAllText(commitFilePath);
     }
 
-    private async Task PullChanges() {
+    public void PullChanges() {
       // Credential information to fetch
       PullOptions options = new PullOptions();
       options.FetchOptions = new FetchOptions();
@@ -128,8 +157,7 @@ namespace SCMApp {
           (url, usernameFromUrl, types) =>
               new DefaultCredentials());
 
-      await InstantiateJsonConfig();
-      var signature = Config.GetSignature();
+      var signature = Repo.Config.BuildSignature(DateTimeOffset.Now);
       try {
         Commands.Pull(Repo, signature, options); 
       }
@@ -139,10 +167,12 @@ namespace SCMApp {
       Console.WriteLine($"{Repo.Head} -> {GetShaShort()}");
     }
 
-    private async Task PushChanges(bool shouldForce = false) {
+    private bool Stage() {
       // Add only modified files
       var statusOps = new StatusOptions();
       statusOps.IncludeIgnored = false;
+
+      bool isModified = false;
 
       if (string.IsNullOrEmpty(FilePath) == false) {
         Console.WriteLine("* add " + FilePath);
@@ -159,46 +189,74 @@ namespace SCMApp {
               // Stage the file
               Repo.Index.Add(item.FilePath);
               Repo.Index.Write();
+
+              if (!isModified)
+                isModified = true;
             }
         }
 
-      Console.WriteLine("changes staged");
+      if (isModified)
+        Console.WriteLine("changes staged");
+
+      return isModified;
+    }
+
+    /// <summary>
+    /// Commit staged changes
+    /// - create the committer's signature
+    /// - use that signature to commit
+    /// * Get Signature from Repo Config ref
+    /// * And, Amend ref,
+    ///    LibGit2Sharp.Tests/CommitFixture.cs
+    /// </summary>
+    private async Task Commit(bool shouldAmend = false) {
+      Signature signature = Repo.Config.BuildSignature(DateTimeOffset.Now);
+
+      // when shouldAmend is true,
+      // don't commit if nothing is staged and commit message is not different
+
+      // Commit to the repository
+      Console.WriteLine("author name: " + signature.Name);
 
       await InstantiateJsonConfig();
-      // Create the committer's signature and commit
-      Signature author = Config.GetSignature();
-      Signature committer = author;
-      var targetBranch = "dev";
+      Commit commit = Repo.Commit(GetCommitMessage(), signature, signature,
+        new CommitOptions { AmendPreviousCommit = shouldAmend });
+      Console.WriteLine("committed");
+    }
 
-      bool hasCommitFailed = false;
-      // Commit to the repository
-      try {
-        Console.WriteLine("author name: " + author.Name);
-        Commit commit = Repo.Commit(GetCommitMessage(), author, committer);
+    /// <summary>
+    /// Push commits to remote
+    /// </summary>
+    private async Task PushToRemote(bool shouldForce = false) {
+      var targetBranch = Repo.Head.FriendlyName;
+      var originBranchStr = "origin/" + targetBranch;
+
+      if (Repo.Head.Tip == Repo.Branches[originBranchStr].Tip) {
+        Console.WriteLine("nothing to push");
+        return ;
       }
-      catch (EmptyCommitException) {
-        // Not implemented: no change found, but previous commit was not pushed to remote yet
-        Console.WriteLine("Not creating new commit.");
-
-        var originBranchStr = "origin/" + targetBranch;
-        if (Repo.Head.Tip == Repo.Branches[originBranchStr].Tip)
-          return ;
-
-        hasCommitFailed = true;
-      }
-
-      if (!hasCommitFailed)
-        Console.WriteLine("committed");
 
       PushOptions options = new PushOptions();
-      // Config is instantiated already before commit.
+      // Config is not instantiated if commit was not called
+      await InstantiateJsonConfig();
       options.CredentialsProvider = Config.GetCredentials();
 
       try {
-        Repo.Network.Push(Repo.Branches[targetBranch], options);
+        if (shouldForce) {
+          // TODO: get remote from upstream tracking URL so that remote is not hardcoded
+          var remote = Repo.Network.Remotes["origin"];
+          if (remote == null)
+            throw new LibGit2SharpException("Remote origin not found!");
+          Console.WriteLine("name: " + remote.Name);
+
+          string pushRefSpec = string.Format("+{0}:{0}", Repo.Head.CanonicalName);
+          Repo.Network.Push(remote, pushRefSpec, options);
+        }
+        else
+          Repo.Network.Push(Repo.Branches[targetBranch], options);
       }
       catch (System.NullReferenceException) {
-        Console.WriteLine("Probably attempting push to wrong branch!");
+        Console.WriteLine("Unexpected, since branch is not hardcoded!");
         return ;
       }
       catch (NonFastForwardException) {
@@ -217,37 +275,13 @@ namespace SCMApp {
         return ;
       }
 
-      Console.WriteLine("pushed");
+      Console.Write("pushed" + (shouldForce? " (forced)" : " "));
     }
 
-    /// <summary>
-    /// Automaton of the app
-    /// 
-    /// ref for enumeration,
-    ///  https://stackoverflow.com/q/105372
-    /// </summary>
-    public async Task Run() {
-      switch (Action) {
-      case SCMAction.ShowInfo:
-        ShowUserInfo();
-        break;
-
-      case SCMAction.ShowStatus:
-        await ShowStatus();
-        break;
-
-      case SCMAction.Pull:
-        await PullChanges();
-        break;
-
-      case SCMAction.PushModified:
-        await PushChanges();
-        break;
-
-      default:
-        Console.WriteLine("Unknown Action specified!");
-        break;
-      }
+    public async Task PushChanges(bool shouldAmend = false) {
+      if (Stage() /* || if shouldAmend && commit log changed*/)
+        await Commit(shouldAmend);
+      await PushToRemote(shouldForce: shouldAmend);
     }
   }
 }

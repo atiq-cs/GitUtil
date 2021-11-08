@@ -92,8 +92,6 @@ namespace SCMApp {
     /// ref, https://docs.microsoft.com/en-us/dotnet/standard/serialization/system-text-json-how-to
     /// </summary>
     public CredentialsHandler GetCredentials() {
-      Console.WriteLine($"{UserCred.UserName} and {UserCred.GithubToken}");
-
       return new CredentialsHandler(
           (url, usernameFromUrl, types) => new UsernamePasswordCredentials()
           {

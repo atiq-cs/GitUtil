@@ -21,18 +21,19 @@ namespace SCMApp {
       var pushCommand = new Command("push", "Commit and push");
       var pushModCmd = new Command("mod", "type of push");
       pushModCmd.AddAlias("modified");
-      // support --amend switch
-      var amendOption = new Option<bool>(new[] {"--amend", "--force"}, "whether to amend last "
-        + "commit and add current changes along");
+
+      // `push mod` and `push mod --amend`
+      var amendOption = new Option<bool>(new[] {"--amend", "-f"}, "whether to amend last commit and"
+        + " add current changes along");
       pushModCmd.AddOption(amendOption);
 
       pushCommand.AddCommand(pushModCmd);
       pushModCmd.Handler = System.CommandLine.Invocation.CommandHandler
         .Create<string, bool>(async (repoPath, amend) =>
       {
-        if (amend) {
+        if (amend)
           System.Console.WriteLine("this will amend last comment and force push to remote");
-        }
+
         await scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, amend);
       });
 

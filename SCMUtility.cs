@@ -221,7 +221,9 @@ namespace SCMApp {
       await InstantiateJsonConfig();
       Commit commit = Repo.Commit(GetCommitMessage(), signature, signature,
         new CommitOptions { AmendPreviousCommit = shouldAmend });
-      Console.WriteLine("committed");
+
+      // Use Logger Verbose
+      Console.WriteLine("committed with amend flag: " + shouldAmend);
     }
 
     /// <summary>
@@ -229,6 +231,8 @@ namespace SCMApp {
     /// </summary>
     private async Task PushToRemote(bool shouldForce = false) {
       var targetBranch = Repo.Head.FriendlyName;
+      // Use Logger Verbose
+      Console.WriteLine("branch: " + targetBranch);
       var originBranchStr = "origin/" + targetBranch;
 
       if (Repo.Head.Tip == Repo.Branches[originBranchStr].Tip) {
@@ -236,7 +240,7 @@ namespace SCMApp {
         return ;
       }
 
-      PushOptions options = new PushOptions();
+      var options = new PushOptions();
       // Config is not instantiated if commit was not called
       await InstantiateJsonConfig();
       options.CredentialsProvider = Config.GetCredentials();
@@ -260,7 +264,7 @@ namespace SCMApp {
         return ;
       }
       catch (NonFastForwardException) {
-        Console.WriteLine("Not attempting fast forward, aborting!");
+        Console.WriteLine("Attempting fast forward with force flag: " + shouldForce);
         return ;
       }
       catch(LibGit2SharpException e) {
@@ -273,6 +277,9 @@ namespace SCMApp {
         Console.WriteLine("URL: " + remote.Url);
         Console.WriteLine("Push URL: " + remote.PushUrl);
         return ;
+      }
+      catch (Exception ex) {
+          Console.WriteLine("Exception: {0}", ex.Message + (ex.InnerException != null ? " / " + ex.InnerException.Message : ""));
       }
 
       Console.Write("pushed" + (shouldForce? " (forced)" : " "));

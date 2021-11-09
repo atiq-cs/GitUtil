@@ -224,15 +224,37 @@ namespace SCMApp {
       Console.WriteLine("and message:\r\n" + await GetCommitMessage(singleLine: true));
     }
 
-    private async Task<bool> HasCommitLogChanged() {
-      Commit lastCommit = null;
-      using (var iter = Repo.Commits.GetEnumerator()) {
-          if (iter.MoveNext())
-            lastCommit = iter.Current;
-      }
-      lastCommit = null;
+    // Declare the generic class to support Generic Type
+    private class EnumerableType<T> {
+      private System.Collections.Generic.IEnumerator<T> Iter;
 
-      var rMsg = lastCommit?.Message?? "failed to retrieve commit msg!";
+      public EnumerableType(System.Collections.Generic.IEnumerator<T> iter) {
+        Iter = iter;
+      }
+
+      public T First() {
+        var first = default(T);
+        
+        if (Iter.MoveNext())
+          first = Iter.Current;
+
+        return first;
+      }
+    }
+
+    private string GetCommitMessageFromHead() {
+      var commits = new EnumerableType<Commit>(Repo.Commits.GetEnumerator());
+      var lastCommit = commits.First();
+      return lastCommit?.Message;
+    }
+
+    private async Task<bool> HasCommitLogChanged() {
+      var rMsg = GetCommitMessageFromHead();
+
+      // Logger Verbose
+      if (rMsg == null || rMsg == string.Empty)
+        Console.WriteLine("failed to retrieve commit message!");
+
       var lMsg = await GetCommitMessage();
 
       // Logger Verbose
@@ -252,7 +274,6 @@ namespace SCMApp {
     private async Task PushToRemote(bool shouldForce = false) {
       var targetBranch = Repo.Head.FriendlyName;
       // Use Logger Verbose
-      // Console.WriteLine("branch: " + targetBranch);
       var originBranchStr = "origin/" + targetBranch;
 
       if (Repo.Head.Tip == Repo.Branches[originBranchStr].Tip) {

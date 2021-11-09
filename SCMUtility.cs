@@ -121,12 +121,9 @@ namespace SCMApp {
       foreach (var item in Repo.RetrieveStatus(statusOps))
         Console.WriteLine((item.State == FileStatus.ModifiedInWorkdir? "*": " ") + " " + item.FilePath);
 
-      Console.WriteLine(Environment.NewLine + "Commit message (local log file):");
-
-      await InstantiateJsonConfig();
-      var msg = GetCommitMessage(singleLine: false);
-
-      Console.WriteLine(msg + Environment.NewLine);
+      Console.WriteLine(Environment.NewLine + "Message (to be used with next commit):");
+      Console.WriteLine(await GetCommitMessage(singleLine: true));
+      Console.WriteLine("..." + Environment.NewLine);
     }
 
     /// <summary>
@@ -134,11 +131,12 @@ namespace SCMApp {
     /// ref for single line read: read-first-line-of-a-text-file-c-sharp
     ///  https://stackoverflow.com/q/52598516
     /// </summary>
-    private string GetCommitMessage(bool singleLine = true) {
+    private async Task<string> GetCommitMessage(bool singleLine = false) {
+      await InstantiateJsonConfig();
       var commitFilePath = Config.GetCommitFilePath();
-      if (!System.IO.File.Exists(commitFilePath)) {
+
+      if (!System.IO.File.Exists(commitFilePath))
         throw new InvalidOperationException($"Log file: {commitFilePath} not found!");
-      }
 
       if (singleLine)
         // Open the file to read from
@@ -218,12 +216,34 @@ namespace SCMApp {
       // Commit to the repository
       Console.WriteLine("author name: " + signature.Name);
 
-      await InstantiateJsonConfig();
-      Commit commit = Repo.Commit(GetCommitMessage(), signature, signature,
+      Commit commit = Repo.Commit(await GetCommitMessage(), signature, signature,
         new CommitOptions { AmendPreviousCommit = shouldAmend });
 
       // Use Logger Verbose
       Console.WriteLine("committed with amend flag: " + shouldAmend);
+      Console.WriteLine("and message:\r\n" + await GetCommitMessage(singleLine: true));
+    }
+
+    private async Task<bool> HasCommitLogChanged() {
+      Commit lastCommit = null;
+      using (var iter = Repo.Commits.GetEnumerator()) {
+          if (iter.MoveNext())
+            lastCommit = iter.Current;
+      }
+      lastCommit = null;
+
+      var rMsg = lastCommit?.Message?? "failed to retrieve commit msg!";
+      var lMsg = await GetCommitMessage();
+
+      // Logger Verbose
+      // Console.WriteLine("comparison result: " + (rMsg == lMsg));
+      // return false;
+      return rMsg != lMsg;
+    }
+
+    private void OnPushStatusError(PushStatusError pushStatusErrors) {
+      Console.WriteLine(string.Format("Failed to update reference '{0}': {1}",
+          pushStatusErrors.Reference, pushStatusErrors.Message));
     }
 
     /// <summary>
@@ -232,7 +252,7 @@ namespace SCMApp {
     private async Task PushToRemote(bool shouldForce = false) {
       var targetBranch = Repo.Head.FriendlyName;
       // Use Logger Verbose
-      Console.WriteLine("branch: " + targetBranch);
+      // Console.WriteLine("branch: " + targetBranch);
       var originBranchStr = "origin/" + targetBranch;
 
       if (Repo.Head.Tip == Repo.Branches[originBranchStr].Tip) {
@@ -240,24 +260,31 @@ namespace SCMApp {
         return ;
       }
 
-      var options = new PushOptions();
+      bool packBuilderCalled = false;
+      PackBuilderProgressHandler packBuilderCb = (x, y, z) => { packBuilderCalled = true; return true; };
+
+      var options = new PushOptions() {
+          OnPushStatusError = OnPushStatusError,
+          OnPackBuilderProgress = packBuilderCb,
+      };
+
       // Config is not instantiated if commit was not called
       await InstantiateJsonConfig();
       options.CredentialsProvider = Config.GetCredentials();
 
       try {
-        if (shouldForce) {
-          // TODO: get remote from upstream tracking URL so that remote is not hardcoded
-          var remote = Repo.Network.Remotes["origin"];
-          if (remote == null)
-            throw new LibGit2SharpException("Remote origin not found!");
-          Console.WriteLine("name: " + remote.Name);
+        //ref, libgit2sharp-git-cannot-push-non-fastforwardable-reference
+        // https://stackoverflow.com/q/47294514
+        var formatSpec = shouldForce? "+{0}:{0}" : "{0}";
+        var pushRefSpec = string.Format(formatSpec, Repo.Head.CanonicalName);
 
-          string pushRefSpec = string.Format("+{0}:{0}", Repo.Head.CanonicalName);
-          Repo.Network.Push(remote, pushRefSpec, options);
-        }
-        else
-          Repo.Network.Push(Repo.Branches[targetBranch], options);
+        var remote = Repo.Network.Remotes["origin"];
+        if (remote == null)
+          // passing to LibGit2SharpException handler to show some info
+          throw new LibGit2SharpException("Remote origin not found!");
+        Console.WriteLine("name: " + remote.Name);
+
+        Repo.Network.Push(remote, pushRefSpec, options);
       }
       catch (System.NullReferenceException) {
         Console.WriteLine("Unexpected, since branch is not hardcoded!");
@@ -286,7 +313,7 @@ namespace SCMApp {
     }
 
     public async Task PushChanges(bool shouldAmend = false) {
-      if (Stage() /* || if shouldAmend && commit log changed*/)
+      if (Stage() || (shouldAmend && await HasCommitLogChanged()))
         await Commit(shouldAmend);
       await PushToRemote(shouldForce: shouldAmend);
     }

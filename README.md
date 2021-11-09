@@ -1,4 +1,5 @@
 ## Git Utility
+Git Utility to handle multiple git accounts.
 A utility to automate some of the commonly used Git Actions.
 
 For example, to push changes to a git repository, this is a common sequence of commands,
@@ -17,23 +18,30 @@ The tool requires an initial json config file to start with. The path of config 
 Example json config,
 
     {
-        "default": {
-            "UserName": "USER_NAME_1",
+        "github.com/USER_NAME_1": {
             "GithubToken": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-            "Dirs": [],
             "FullName": "First Last",
-            "Email": "user@corp.com",
-            "CommitLogFilePath": "D:\\code\\commit_log_user1.txt"
+            "Email": "user@github.com",
+            "CommitLogFilePath": "D:\\code\\commit_log_user1.txt",
+            "IsDefault": "True"
         },
-        "specified": {
-            "UserName": "USER_NAME_2",
-            "GithubToken": "ghp_yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+        "bitbucket.com/USER_NAME_2": {
+            "Password": "YOUR_PASS_2",
             "Dirs": [
                 "D:\\Code\\OtherOrg\\BIApp"
             ],
             "FullName": "First Last",
-            "Email": "user2@corp.com",
+            "Email": "user2@bitbucket.com",
             "CommitLogFilePath": "D:\\code\\commit_log_user2.txt"
+        }
+        "localhost/USER_NAME_3": {
+            "Password": "YOUR_PASS_3",
+            "Dirs": [
+                "D:\\Code\\LocalProjects\\BIApp"
+            ],
+            "FullName": "First Last",
+            "Email": "user3@corp.com",
+            "CommitLogFilePath": "D:\\code\\commit_log_use3.txt"
         }
     }
 

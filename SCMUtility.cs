@@ -33,10 +33,6 @@ namespace SCMApp {
     /// </summary>
     private SCMAction Action { get; set; }
     /// <summary>
-    /// Single file path or pattern files for adding
-    /// </summary>
-    private string FilePath { get; set; }
-    /// <summary>
     /// Configuration Instance
     /// </summary>
     private JsonConfig Config { get; set; }
@@ -57,31 +53,23 @@ namespace SCMApp {
  
       Action = action;
       
-      FilePath = filePath;
-      if (string.IsNullOrEmpty(FilePath) == false)
-      {
-        if (FilePath.StartsWith(repoPath))
-          FilePath = FilePath.Substring(repoPath.Length + 1);
-
-        var prePath = @"input\posts";
-        if (repoPath.EndsWith(@"statiq\note") && FilePath.EndsWith(".md"))
-          FilePath = prePath + '\\' + FilePath;
-      }
-
       Config = null;
     }
 
     /// <summary>
     /// Get short commit sha id: 9 alpha digits
+    /// Truncate the tip of the Head
     /// </summary>
     private string GetShaShort() => Repo.Head.Tip.Id.ToString().Substring(0, 9);
 
     /// <summary>
     /// Get rid of the suffix from git repo path
+    /// <example>
     /// Otherwise output string comes as following,
     ///  "D:\Code\CoolApp\.git\"
     /// After trimming suffix it becomes,
     ///  "D:\Code\CoolApp"
+    /// </example>
     /// </summary>
     private string GetRepoPath() {
       var repoPath = Repo.Info.WorkingDirectory;
@@ -127,10 +115,11 @@ namespace SCMApp {
     }
 
     /// <summary>
-    /// Get commit message from commit log file
-    /// ref for single line read: read-first-line-of-a-text-file-c-sharp
-    ///  https://stackoverflow.com/q/52598516
+    /// Get commit message from commit log file (full or first line of it)
+    /// <see href="https://stackoverflow.com/q/52598516">SO - Read first line of a text file C#</see>
     /// </summary>
+    /// <param name="singleLine">whether to return only first line</param>
+    /// <returns>retrieved message</returns>
     private async Task<string> GetCommitMessage(bool singleLine = false) {
       await InstantiateJsonConfig();
       var commitFilePath = Config.GetCommitFilePath();
@@ -149,7 +138,7 @@ namespace SCMApp {
 
     public void PullChanges() {
       // Credential information to fetch
-      PullOptions options = new PullOptions();
+      var options = new PullOptions();
       options.FetchOptions = new FetchOptions();
       options.FetchOptions.CredentialsProvider = new CredentialsHandler(
           (url, usernameFromUrl, types) =>
@@ -165,36 +154,93 @@ namespace SCMApp {
       Console.WriteLine($"{Repo.Head} -> {GetShaShort()}");
     }
 
-    private bool Stage() {
-      // Add only modified files
-      var statusOps = new StatusOptions();
-      statusOps.IncludeIgnored = false;
+    /// <summary>
+    /// At present 3 types are supported
+    /// - single: only specified file
+    /// - Update: indicates only modified files
+    /// - all files in the repository workspace
+    /// </summary>
+    public enum StageType {
+      Single,
+      Update,
+      All
+    };
 
+
+    /// <summary>
+    /// Stage changes for committing
+    /// </summary>
+    /// <remarks>
+    /// Provides hardcoded relative path support for 'input\posts'
+    /// </remarks>
+    /// <param name="stageType"><see cref="StageType"/></param>
+    /// <param name="filePath">file path passed with 'push single'</param>
+    /// <returns>indicates whether any change was staged</returns>
+    private bool Stage(StageType stageType, string filePath) {
       bool isModified = false;
+      var statusOps = new StatusOptions{IncludeIgnored = false};
 
-      if (string.IsNullOrEmpty(FilePath) == false) {
-        Console.WriteLine("* add " + FilePath);
-        // Stage the file
-        Repo.Index.Add(FilePath);
-        Repo.Index.Write();
-      }
-      else
-        foreach (var item in Repo.RetrieveStatus(statusOps))
+      switch(stageType) {
+      case StageType.Single:
+        if (string.IsNullOrEmpty(filePath) == false)
         {
+          var repoPath = GetRepoPath();
+          // Get relative path of the dir
+          if (filePath.StartsWith(repoPath))
+            filePath = filePath.Substring(repoPath.Length + 1);
+
+          var statiqPostsPath = @"input\posts";
+          if (System.IO.Directory.Exists(statiqPostsPath) && filePath.EndsWith(".md")) {
+            var newFilePath = statiqPostsPath + '\\' + filePath;
+            if (System.IO.File.Exists(newFilePath))
+              filePath = newFilePath;
+          }
+        }
+
+        if (System.IO.File.Exists(filePath)) {
+          Console.WriteLine("* " + filePath);
+          Repo.Index.Add(filePath);
+          Repo.Index.Write();
+          isModified = true;
+        }
+        else // Logger Verbose
+          Console.WriteLine($"{filePath} doesn't exist!");
+        break;
+
+      case StageType.Update:
+        foreach (var item in Repo.RetrieveStatus(statusOps)) {
+            // Stage file if it's modified
             if (item.State == FileStatus.ModifiedInWorkdir)
             {
-              Console.WriteLine("adding " + item.FilePath);
-              // Stage the file
-              Repo.Index.Add(item.FilePath);
-              Repo.Index.Write();
+              if (System.IO.File.Exists(item.FilePath)) {
+                Console.WriteLine("* " + item.FilePath);
+                Repo.Index.Add(item.FilePath);
+                Repo.Index.Write();
+              }
 
               if (!isModified)
                 isModified = true;
             }
         }
+        break;
+      
+      case StageType.All:
+        foreach (var item in Repo.RetrieveStatus(statusOps)) {
+            // Stage any file found
+            if (System.IO.File.Exists(item.FilePath)) {
+              Console.WriteLine("* " + item.FilePath);
+              Repo.Index.Add(item.FilePath);
+              Repo.Index.Write();
+            }
 
-      if (isModified)
-        Console.WriteLine("changes staged");
+            if (!isModified)
+              isModified = true;
+        }
+        break;
+
+      default:
+        break;
+      }
 
       return isModified;
     }
@@ -203,17 +249,14 @@ namespace SCMApp {
     /// Commit staged changes
     /// - create the committer's signature
     /// - use that signature to commit
-    /// * Get Signature from Repo Config ref
+    /// * Get Signature from Repo Config ref,
     /// * And, Amend ref,
-    ///    LibGit2Sharp.Tests/CommitFixture.cs
+    /// <see href="LibGit2Sharp.Tests/CommitFixture.cs">LibGit2Sharp CommitFixture Tests</see>
     /// </summary>
     private async Task Commit(bool shouldAmend = false) {
       Signature signature = Repo.Config.BuildSignature(DateTimeOffset.Now);
 
-      // when shouldAmend is true,
-      // don't commit if nothing is staged and commit message is not different
-
-      // Commit to the repository
+      // Commit to local repository
       Console.WriteLine("author name: " + signature.Name);
 
       Commit commit = Repo.Commit(await GetCommitMessage(), signature, signature,
@@ -224,7 +267,10 @@ namespace SCMApp {
       Console.WriteLine("and message:\r\n" + await GetCommitMessage(singleLine: true));
     }
 
-    // Declare the generic class to support Generic Type
+    /// <summary>
+    /// Generic class to support Generic Type to return First Item when an IEnumerable is
+    /// provided
+    /// </summary>
     private class EnumerableType<T> {
       private System.Collections.Generic.IEnumerator<T> Iter;
 
@@ -242,14 +288,14 @@ namespace SCMApp {
       }
     }
 
-    private string GetCommitMessageFromHead() {
+    private string GetCommitMessageFromFirst() {
       var commits = new EnumerableType<Commit>(Repo.Commits.GetEnumerator());
       var lastCommit = commits.First();
       return lastCommit?.Message;
     }
 
     private async Task<bool> HasCommitLogChanged() {
-      var rMsg = GetCommitMessageFromHead();
+      var rMsg = GetCommitMessageFromFirst();
 
       // Logger Verbose
       if (rMsg == null || rMsg == string.Empty)
@@ -270,19 +316,19 @@ namespace SCMApp {
 
     /// <summary>
     /// Push commits to remote
+    ///  does force push when --amend flag is present
     /// </summary>
     private async Task PushToRemote(bool shouldForce = false) {
       var targetBranch = Repo.Head.FriendlyName;
       // Use Logger Verbose
       var originBranchStr = "origin/" + targetBranch;
+      Console.WriteLine("origin branch string: " + originBranchStr + " doesRemoteExist: " + (Repo.
+        Branches[originBranchStr] == null));
 
-      if (Repo.Head.Tip == Repo.Branches[originBranchStr].Tip) {
-        Console.WriteLine("nothing to push");
-        return ;
-      }
-
-      bool packBuilderCalled = false;
-      PackBuilderProgressHandler packBuilderCb = (x, y, z) => { packBuilderCalled = true; return true; };
+      PackBuilderProgressHandler packBuilderCb = (x, y, z) => {
+        Console.WriteLine($"{x} {y} {z}");
+        return true;
+      };
 
       var options = new PushOptions() {
           OnPushStatusError = OnPushStatusError,
@@ -294,16 +340,18 @@ namespace SCMApp {
       options.CredentialsProvider = Config.GetCredentials();
 
       try {
-        //ref, libgit2sharp-git-cannot-push-non-fastforwardable-reference
-        // https://stackoverflow.com/q/47294514
-        var formatSpec = shouldForce? "+{0}:{0}" : "{0}";
+        // ref, libgit2sharp-git-cannot-push-non-fastforwardable-reference
+        //  https://stackoverflow.com/q/47294514
+        var formatSpec = (shouldForce || Repo.Branches[originBranchStr] == null)? "+{0}:{0}" : "{0}";
         var pushRefSpec = string.Format(formatSpec, Repo.Head.CanonicalName);
+        Console.WriteLine("refSpec: " + pushRefSpec);
 
         var remote = Repo.Network.Remotes["origin"];
-        if (remote == null)
-          // passing to LibGit2SharpException handler to show some info
+        if (remote == null) {
+          Console.WriteLine("Exception: Remote origin not found!");
           throw new LibGit2SharpException("Remote origin not found!");
-        Console.WriteLine("name: " + remote.Name);
+        }
+        Console.WriteLine("remote name: " + remote.Name);
 
         Repo.Network.Push(remote, pushRefSpec, options);
       }
@@ -312,11 +360,12 @@ namespace SCMApp {
         return ;
       }
       catch (NonFastForwardException) {
-        Console.WriteLine("Attempting fast forward with force flag: " + shouldForce);
+        Console.WriteLine("Attempting fast forward with force flag: " + shouldForce +
+          " failed! Consider passing --amend");
         return ;
       }
       catch(LibGit2SharpException e) {
-        Console.WriteLine("Probable authentication error: " + e.Message);
+        Console.WriteLine("Exception: {0}", e.Message + (e.InnerException != null ? " / " + e.InnerException.Message : ""));
 
         // stuffs to help debugging
         Console.WriteLine("Canonical name: " + Repo.Branches[targetBranch].CanonicalName);
@@ -330,11 +379,31 @@ namespace SCMApp {
           Console.WriteLine("Exception: {0}", ex.Message + (ex.InnerException != null ? " / " + ex.InnerException.Message : ""));
       }
 
-      Console.Write("pushed" + (shouldForce? " (forced)" : " "));
+      Console.Write("pushed" + (shouldForce? " (forced) " : " ") + "-> " + GetShaShort());
     }
 
-    public async Task PushChanges(bool shouldAmend = false) {
-      if (Stage() || (shouldAmend && await HasCommitLogChanged()))
+    /// <summary>
+    /// Wire the cases to methodologically call Stage()
+    /// </summary>
+    private bool StageHelper(string filePath) {
+      if (string.IsNullOrEmpty(filePath))
+        return Stage(StageType.Update, string.Empty);
+      if (filePath == "__cmdOption:--all")
+        return Stage(StageType.All, string.Empty);
+      return Stage(StageType.Single, filePath);
+    }
+
+    /// <summary>
+    /// SCP - Stage, Commit and Push
+    /// </summary>
+    /// <param name="filePath">file path passed with 'push single', Empty otherwise</param>
+    /// <param name="shouldAmend">amend commit and force push</param>
+    public async Task SCPChanges(string filePath, bool shouldAmend = false) {
+      var isMod = StageHelper(filePath);
+      if (isMod)
+        Console.WriteLine("changes staged");
+
+      if (isMod || (shouldAmend && await HasCommitLogChanged()))
         await Commit(shouldAmend);
       await PushToRemote(shouldForce: shouldAmend);
     }

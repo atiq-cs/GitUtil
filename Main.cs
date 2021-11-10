@@ -16,62 +16,89 @@ namespace SCMApp {
     /// <returns></returns>
     static async Task Main(string[] args) {
       var scmAppCLA = new SCMAppCLA();
-      var rootCommand = new RootCommand("");
+      var rootCmd = new RootCommand("");
 
-      var pushCommand = new Command("push", "Commit and push");
-      var pushModCmd = new Command("mod", "type of push");
-      pushModCmd.AddAlias("modified");
+      var pushCmd = new Command("push", "Commit and push");
+      // push mod
+      var modSubCmd = new Command("mod", "Add only modified files to commit and Push.");
+      modSubCmd.AddAlias("modified");
 
-      // `push mod` and `push mod --amend`
-      var amendOption = new Option<bool>(new[] {"--amend", "-f"}, "whether to amend last commit and"
-        + " add current changes along");
-      pushModCmd.AddOption(amendOption);
+      // 'push mod' with or without '--amend'
+      var amendOption = new Option<bool>(new[] {"--amend", "-f"}, "Amend last commit and force push"
+        + "!");
+      modSubCmd.AddOption(amendOption);
 
-      pushCommand.AddCommand(pushModCmd);
-      pushModCmd.Handler = System.CommandLine.Invocation.CommandHandler
+      modSubCmd.Handler = System.CommandLine.Invocation.CommandHandler
         .Create<string, bool>(async (repoPath, amend) =>
       {
         if (amend)
-          System.Console.WriteLine("this will amend last comment and force push to remote");
+          System.Console.WriteLine("Amend/Force flag is set. This will amend last comment and force push "
+            + "to remote!");
 
-        await scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, amend);
+        await scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, string.Empty, amend);
       });
+      pushCmd.AddCommand(modSubCmd);
 
-      rootCommand.AddCommand(pushCommand);
+      // push single
+      var singleSubCmd = new Command("single", "Add a file to commit and push.");
+      singleSubCmd.AddAlias("single-file");
+      singleSubCmd.AddArgument(new Argument("filePath"));
 
-      var pullCommand = new Command("pull", "Pull changes from repository");
-      pullCommand.Handler = System.CommandLine.Invocation.CommandHandler
+      singleSubCmd.Handler = System.CommandLine.Invocation.CommandHandler
+        .Create<string, string, bool>(async (repoPath, filePath, amend) =>
+      {
+        await scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, filePath, amend);
+      });
+      singleSubCmd.AddOption(amendOption);    // Support --amend switch
+      pushCmd.AddCommand(singleSubCmd);
+
+      // push all
+      var allSubCmd = new Command("all", "Add all files to commit and push.");
+
+      allSubCmd.Handler = System.CommandLine.Invocation.CommandHandler
+        .Create<string, bool>(async (repoPath, amend) =>
+      {
+        // hacky string, consumed by StageGeneric()
+        await scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, "__cmdOption:--all", amend);
+      });
+      allSubCmd.AddOption(amendOption);     // Support --amend switch
+      pushCmd.AddCommand(allSubCmd);
+
+      rootCmd.AddCommand(pushCmd);
+
+      var pullCmd = new Command("pull", "Pull changes from repository.");
+      pullCmd.Handler = System.CommandLine.Invocation.CommandHandler
         .Create<string>(async (repoPath) =>
       {
-        await scmAppCLA.Run(GitUtility.SCMAction.Pull, repoPath);
+        await scmAppCLA.Run(GitUtility.SCMAction.Pull, repoPath, string.Empty);
       });
-      rootCommand.AddCommand(pullCommand);
+      rootCmd.AddCommand(pullCmd);
 
-      var infoCommand = new Command("info", "Show information about repository");
+      var infoCommand = new Command("info", "Show information about repository.");
       infoCommand.AddAlias("information");
       infoCommand.Handler = System.CommandLine.Invocation.CommandHandler
         .Create<string>(async (repoPath) =>
       {
-        await scmAppCLA.Run(GitUtility.SCMAction.ShowInfo, repoPath);
+        await scmAppCLA.Run(GitUtility.SCMAction.ShowInfo, repoPath, string.Empty);
       });
-      rootCommand.AddCommand(infoCommand);
+      rootCmd.AddCommand(infoCommand);
 
-      var statusCommand = new Command("status", "Show status on changes/message");
+      var statusCommand = new Command("status", "Show status on changes (including commit message).");
       statusCommand.AddAlias("stat");
       statusCommand.Handler = System.CommandLine.Invocation.CommandHandler
         .Create<string>(async (repoPath) =>
       {
-        await scmAppCLA.Run(GitUtility.SCMAction.ShowStatus, repoPath);
+        await scmAppCLA.Run(GitUtility.SCMAction.ShowStatus, repoPath, string.Empty);
       });
-      rootCommand.AddCommand(statusCommand);
+      rootCmd.AddCommand(statusCommand);
 
       // POSIX style arguments
       var rpOption = new Option<string>("--repo-path", "Path of the repo");
-      rootCommand.AddOption(rpOption);
+      rootCmd.AddOption(rpOption);
       var jcOption = new Option<string>("--config-file-path", "Path of the json configuration file");
-      rootCommand.AddOption(jcOption);
+      rootCmd.AddOption(jcOption);
 
-      await rootCommand.InvokeAsync(args);
+      await rootCmd.InvokeAsync(args);
     }
 
   }
@@ -83,7 +110,7 @@ namespace SCMApp {
     /// <summary>
     /// Automaton of the app
     /// </summary>
-    public async Task Run(GitUtility.SCMAction action, string repoPath, bool shouldAmend=false) {
+    public async Task Run(GitUtility.SCMAction action, string repoPath, string filePath, bool shouldAmend=false) {
       if (repoPath.EndsWith('\\'))
         repoPath = repoPath.Substring(0, repoPath.Length - 1);
 
@@ -102,7 +129,7 @@ namespace SCMApp {
         break;
 
       case GitUtility.SCMAction.PushModified:
-        await app.PushChanges(shouldAmend);
+        await app.SCPChanges(filePath, shouldAmend);
         break;
 
       default:

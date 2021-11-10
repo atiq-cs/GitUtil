@@ -10,7 +10,7 @@ For example, to push changes to a git repository, this is a common sequence of c
 
 This utility does all of that when we run,
 
-    GitUtil push mod
+    GitUtility push mod
 
 The tool requires an initial json config file to start with. The path of config file is:
 `%LOCALAPPDATA%\GitUtilConfig.json`
@@ -49,16 +49,17 @@ Example json config,
 **CLA Examples**
 Commands,
 
-    GitUtil info
-    GitUtil push mod
-    GitUtil pull
-    GitUtil push message
-    GitUtil push mod --amend
+    GitUtility info
+    GitUtility push mod
+    GitUtility pull
+    GitUtility push mod --amend
 
 Example run with POSIX style arguments,
 
-    GitUtil --repo-path D:\pwsh-scripts info
-    GitUtil --config-file-path D:\Workspace\Config.json info
+    GitUtility --repo-path D:\pwsh-scripts info
+    GitUtility --config-file-path D:\Workspace\Config.json info
+
+`push mod` only pushes modified files.
 
 Other examples,
 
@@ -67,9 +68,20 @@ Other examples,
 Please visit the design wiki for command line arguments (in reference section) to know more about the
 arguments.
 
+To add a single file to commit and to push it to remote,
+
+    GitUtility push single relative_file_path
+
+To add all files and to push,
+
+    GitUtility push all
+
+
+All push supports --amend which allows modifying/ammending the last commit and pushing to remote.
+
 For help on CLA try,
 
-    GitUtil help
+    GitUtility help
 
 
 ### References

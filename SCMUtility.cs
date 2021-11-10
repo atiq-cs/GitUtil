@@ -4,19 +4,20 @@
 namespace SCMApp {
   using System;
   using LibGit2Sharp;
-  using LibGit2Sharp.Handlers;
   using System.Threading.Tasks;
 
   /// <summary> Source Control Manager Application
   /// This name coz we might wanna support other version control systems in future
   /// </summary>
-  internal static class NamespaceDoc {
-  }
+  internal static class NamespaceDoc { }
 
   internal class GitUtility {
-  /// <summary> ref for enumeration,
-  ///  https://stackoverflow.com/q/105372
-  /// </summary>
+    /// <summary>
+    /// Action representing sequence of git commands
+    /// <see href="https://stackoverflow.com/q/105372">
+    /// enumeration reference: SO - How to enumerate an enum
+    /// </see>
+    /// </summary>
     public enum SCMAction {
       ShowInfo,
       PushModified,
@@ -61,6 +62,7 @@ namespace SCMApp {
     /// Truncate the tip of the Head
     /// </summary>
     private string GetShaShort() => Repo.Head.Tip.Id.ToString().Substring(0, 9);
+
 
     /// <summary>
     /// Get rid of the suffix from git repo path
@@ -140,7 +142,7 @@ namespace SCMApp {
       // Credential information to fetch
       var options = new PullOptions();
       options.FetchOptions = new FetchOptions();
-      options.FetchOptions.CredentialsProvider = new CredentialsHandler(
+      options.FetchOptions.CredentialsProvider = new LibGit2Sharp.Handlers.CredentialsHandler(
           (url, usernameFromUrl, types) =>
               new DefaultCredentials());
 
@@ -317,6 +319,12 @@ namespace SCMApp {
     /// <summary>
     /// Push commits to remote
     ///  does force push when --amend flag is present
+    /// <remarks>
+    /// pertinent to push ref spec used in Network.Push
+    /// <see href="https://stackoverflow.com/q/47294514">
+    ///  SO - libgit2sharp Git cannot push non-fastforwardable reference
+    /// </see>
+    /// </remarks>
     /// </summary>
     private async Task PushToRemote(bool shouldForce = false) {
       var targetBranch = Repo.Head.FriendlyName;
@@ -325,7 +333,7 @@ namespace SCMApp {
       Console.WriteLine("origin branch string: " + originBranchStr + " doesRemoteExist: " + (Repo.
         Branches[originBranchStr] == null));
 
-      PackBuilderProgressHandler packBuilderCb = (x, y, z) => {
+      LibGit2Sharp.Handlers.PackBuilderProgressHandler packBuilderCb = (x, y, z) => {
         Console.WriteLine($"{x} {y} {z}");
         return true;
       };
@@ -340,8 +348,6 @@ namespace SCMApp {
       options.CredentialsProvider = Config.GetCredentials();
 
       try {
-        // ref, libgit2sharp-git-cannot-push-non-fastforwardable-reference
-        //  https://stackoverflow.com/q/47294514
         var formatSpec = (shouldForce || Repo.Branches[originBranchStr] == null)? "+{0}:{0}" : "{0}";
         var pushRefSpec = string.Format(formatSpec, Repo.Head.CanonicalName);
         Console.WriteLine("refSpec: " + pushRefSpec);

@@ -14,7 +14,8 @@ namespace SCMApp {
     /// </summary>
     /// <param name="args">CLA</param>
     /// <returns></returns>
-    static async Task Main(string[] args) {
+    static async Task Main(string[] args)
+    {
       var scmAppCLA = new SCMAppCLA();
       var rootCmd = new RootCommand("");
 
@@ -100,21 +101,21 @@ namespace SCMApp {
 
       await rootCmd.InvokeAsync(args);
     }
-
   }
 
   class SCMAppCLA {
-    public SCMAppCLA() {
-    }
+    public SCMAppCLA() { }
 
     /// <summary>
     /// Automaton of the app
     /// </summary>
-    public async Task Run(GitUtility.SCMAction action, string repoPath, string filePath, bool shouldAmend=false) {
+    public async Task Run(GitUtility.SCMAction action, string repoPath, string filePath, bool shouldAmend=false)
+    {
       if (repoPath.EndsWith('\\'))
         repoPath = repoPath.Substring(0, repoPath.Length - 1);
 
       var app = new GitUtility(action, repoPath, string.Empty);
+
       switch (action) {
       case GitUtility.SCMAction.ShowInfo:
         app.ShowRepoAndUserInfo();

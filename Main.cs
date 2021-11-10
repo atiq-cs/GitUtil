@@ -17,7 +17,7 @@ namespace SCMApp {
     static async Task Main(string[] args)
     {
       var scmAppCLA = new SCMAppCLA();
-      var rootCmd = new RootCommand("");
+      var rootCmd = new RootCommand();
 
       var pushCmd = new Command("push", "Commit and push");
       // push mod
@@ -75,23 +75,33 @@ namespace SCMApp {
       });
       rootCmd.AddCommand(pullCmd);
 
-      var infoCommand = new Command("info", "Show information about repository.");
-      infoCommand.AddAlias("information");
-      infoCommand.Handler = System.CommandLine.Invocation.CommandHandler
+      var infoCmd = new Command("info", "Show information about repository.");
+      infoCmd.AddAlias("information");
+      infoCmd.Handler = System.CommandLine.Invocation.CommandHandler
         .Create<string>(async (repoPath) =>
       {
         await scmAppCLA.Run(GitUtility.SCMAction.ShowInfo, repoPath, string.Empty);
       });
-      rootCmd.AddCommand(infoCommand);
+      rootCmd.AddCommand(infoCmd);
 
-      var statusCommand = new Command("status", "Show status on changes (including commit message).");
-      statusCommand.AddAlias("stat");
-      statusCommand.Handler = System.CommandLine.Invocation.CommandHandler
+      var statusCmd = new Command("status", "Show status on changes (including commit message).");
+      statusCmd.AddAlias("stat");
+      statusCmd.Handler = System.CommandLine.Invocation.CommandHandler
         .Create<string>(async (repoPath) =>
       {
         await scmAppCLA.Run(GitUtility.SCMAction.ShowStatus, repoPath, string.Empty);
       });
-      rootCmd.AddCommand(statusCommand);
+      rootCmd.AddCommand(statusCmd);
+
+      var setUrlCmd = new Command("set-url", "Update remote origin URL.");
+      setUrlCmd.AddArgument(new Argument("remoteUrl"));
+
+      setUrlCmd.Handler = System.CommandLine.Invocation.CommandHandler
+        .Create<string, string>(async (repoPath, remoteUrl) =>
+      {
+        await scmAppCLA.Run(GitUtility.SCMAction.UpdateRemote, repoPath, remoteUrl, false);
+      });
+      rootCmd.AddCommand(setUrlCmd);
 
       // POSIX style arguments
       var rpOption = new Option<string>("--repo-path", "Path of the repo");
@@ -117,20 +127,25 @@ namespace SCMApp {
       var app = new GitUtility(action, repoPath, string.Empty);
 
       switch (action) {
-      case GitUtility.SCMAction.ShowInfo:
-        app.ShowRepoAndUserInfo();
+      case GitUtility.SCMAction.PushModified:
+        await app.SCPChanges(filePath, shouldAmend);
         break;
 
-      case GitUtility.SCMAction.ShowStatus:
-        await app.ShowStatus();
+      case GitUtility.SCMAction.UpdateRemote:
+        // filePath here is remote URL
+        app.UpdateRemoteURL(filePath);
         break;
 
       case GitUtility.SCMAction.Pull:
         app.PullChanges();
         break;
 
-      case GitUtility.SCMAction.PushModified:
-        await app.SCPChanges(filePath, shouldAmend);
+      case GitUtility.SCMAction.ShowInfo:
+        app.ShowRepoAndUserInfo();
+        break;
+
+      case GitUtility.SCMAction.ShowStatus:
+        await app.ShowStatus();
         break;
 
       default:

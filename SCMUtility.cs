@@ -19,8 +19,9 @@ namespace SCMApp {
     /// </see>
     /// </summary>
     public enum SCMAction {
-      ShowInfo,
       PushModified,
+      UpdateRemote,
+      ShowInfo,
       ShowStatus,
       Pull
     };
@@ -330,8 +331,8 @@ namespace SCMApp {
       var targetBranch = Repo.Head.FriendlyName;
       // Use Logger Verbose
       var originBranchStr = "origin/" + targetBranch;
-      Console.WriteLine("origin branch string: " + originBranchStr + " doesRemoteExist: " + (Repo.
-        Branches[originBranchStr] == null));
+      Console.WriteLine("origin branch string: " + originBranchStr + " does Remote Origin Target " +
+        "Branch Exist: " + (Repo.Branches[originBranchStr] == null));
 
       LibGit2Sharp.Handlers.PackBuilderProgressHandler packBuilderCb = (x, y, z) => {
         Console.WriteLine($"{x} {y} {z}");
@@ -354,7 +355,7 @@ namespace SCMApp {
 
         var remote = Repo.Network.Remotes["origin"];
         if (remote == null) {
-          Console.WriteLine("Exception: Remote origin not found!");
+          Console.WriteLine("Exception: Remote origin not found! Try running with set-url argument.");
           throw new LibGit2SharpException("Remote origin not found!");
         }
         Console.WriteLine("remote name: " + remote.Name);
@@ -412,6 +413,21 @@ namespace SCMApp {
       if (isMod || (shouldAmend && await HasCommitLogChanged()))
         await Commit(shouldAmend);
       await PushToRemote(shouldForce: shouldAmend);
+    }
+
+    /// <summary>
+    /// Add/update remote URL
+    /// Only supports one remote right now which is 'origin'
+    /// </summary>
+    /// <param name="remoteURL">remote's URL</param>
+    public void UpdateRemoteURL(string remoteURL) {
+      var remoteName = "origin";
+      if (Repo.Network.Remotes[remoteName] == null)
+        Repo.Network.Remotes.Add(remoteName, remoteURL);
+      else {
+        Repo.Network.Remotes.Update(remoteName, r => r.Url = remoteURL);
+        Repo.Network.Remotes.Update(remoteName, r => r.PushUrl = remoteURL);
+      }
     }
   }
 }

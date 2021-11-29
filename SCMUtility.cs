@@ -52,6 +52,7 @@ namespace SCMApp {
       catch (RepositoryNotFoundException e) {
         Console.WriteLine("Repo dir: " + repoPath);
         Console.WriteLine(e.Message);
+        throw ;
       }
  
       Action = action;
@@ -103,6 +104,7 @@ namespace SCMApp {
 
     private async Task InstantiateJsonConfig() {
       if (Config == null) {
+        // TODO: merge these 2 into constructor or something
         Config = new JsonConfig();
         await Config.Load(Repo.Config.Get<string>("user.name").Value, Repo.Config.
           Get<string>("user.email").Value, GetRepoPath());
@@ -146,21 +148,53 @@ namespace SCMApp {
         return System.IO.File.ReadAllText(commitFilePath);
     }
 
-    public void PullChanges() {
-      // Credential information to fetch
-      var options = new PullOptions();
-      options.FetchOptions = new FetchOptions();
-      options.FetchOptions.CredentialsProvider = new LibGit2Sharp.Handlers.CredentialsHandler(
-          (url, usernameFromUrl, types) =>
-              new DefaultCredentials());
+    /// <summary>
+    /// Pull changes from remote
+    /// </summary>
+    /// <remarks>
+    /// does not support pull from private repository
+    ///  TODO: test with private
+    /// </remarks>
+    public async Task PullChanges(bool isRemoteUpstream) {
+      // will be rquired if repository requires authentication
+      // await InstantiateJsonConfig();
+      var options = new PullOptions() {
+        FetchOptions = new FetchOptions() /*{
+          CredentialsProvider = Config.GetCredentials(),
+        },*/
+      };
 
       var signature = Repo.Config.BuildSignature(DateTimeOffset.Now);
+      // TODO: add an optional argument to provide this
+      var remoteBranchName = "main";    // usually main for GitHub etc.
+
       try {
-        Commands.Pull(Repo, signature, options); 
+        if (! isRemoteUpstream)
+          Commands.Pull(Repo, signature, options);
+        else {
+          var remoteName = "upstream";
+          var refSpec = string.Format("refs/heads/{2}:refs/remotes/{0}/{1}", remoteName, Repo.Head.FriendlyName, remoteBranchName);
+          await InstantiateJsonConfig();
+          Console.WriteLine($"pulling {remoteName}/{remoteBranchName}");
+
+          // Perform the actual fetch
+          Commands.Fetch(Repo, remoteName, new string[] { refSpec },
+            options.FetchOptions,
+            null
+          );
+          // Merge fetched refs
+          Repo.MergeFetchedRefs(signature, options.MergeOptions);
+        }
       }
       catch (CheckoutConflictException e) {
           Console.WriteLine(e.Message);
+          return ;
       }
+      catch (LibGit2Sharp.MergeFetchHeadNotFoundException e) {
+        Console.WriteLine($"{remoteBranchName} does not exist! " + e.Message);
+        return ;
+      }
+
       Console.WriteLine($"{Repo.Head} -> {GetShaShort()}");
     }
 
@@ -275,7 +309,8 @@ namespace SCMApp {
 
       // Use Logger Verbose
       Console.WriteLine("committed with amend flag: " + shouldAmend);
-      Console.WriteLine("and message:\r\n" + await GetCommitMessage(singleLine: true));
+      Console.WriteLine("and message:" + Environment.NewLine
+        + await GetCommitMessage(singleLine: true) + Environment.NewLine);
 
       // Test this with an initialized repo (no commits)
       //  ref, https://github.com/libgit2/libgit2sharp/issues/802
@@ -370,7 +405,7 @@ namespace SCMApp {
       var options = new PushOptions() {
           CredentialsProvider = Config.GetCredentials(),
           OnPushStatusError = OnPushStatusError,
-          OnPackBuilderProgress = packBuilderCb,
+          OnPackBuilderProgress = packBuilderCb
         };
 
       try {
@@ -442,13 +477,17 @@ namespace SCMApp {
 
     /// <summary>
     /// Add/update remote URL
-    /// Only supports one remote right now which is 'origin'
     /// </summary>
     /// <param name="remoteName">remote name i.e., origin or upstream</param>
     /// <param name="remoteURL">remote's URL</param>
     public void UpdateRemoteURL(string remoteName, string remoteURL) {
       if (Repo.Network.Remotes[remoteName] == null)
         Repo.Network.Remotes.Add(remoteName, remoteURL);
+      else if (Repo.Network.Remotes[remoteName].Url == remoteURL &&
+        Repo.Network.Remotes[remoteName].PushUrl == remoteURL)
+      {
+        Console.WriteLine("Already set to provided URL!");
+      }
       else {
         Repo.Network.Remotes.Update(remoteName, r => r.Url = remoteURL);
         Repo.Network.Remotes.Update(remoteName, r => r.PushUrl = remoteURL);

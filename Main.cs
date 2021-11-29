@@ -68,10 +68,12 @@ namespace SCMApp {
       rootCmd.AddCommand(pushCmd);
 
       var pullCmd = new Command("pull", "Pull changes from repository.");
+      var upstreamOption = new Option<bool>(new[] {"--upstream", "-u"}, "pull from upstream");
+      pullCmd.AddOption(upstreamOption);
       pullCmd.Handler = System.CommandLine.Invocation.CommandHandler
-        .Create<string>(async (repoPath) =>
+        .Create<string, bool>(async (repoPath, upstream) =>
       {
-        await scmAppCLA.Run(GitUtility.SCMAction.Pull, repoPath, string.Empty);
+        await scmAppCLA.Run(GitUtility.SCMAction.Pull, repoPath, string.Empty, upstream);
       });
       rootCmd.AddCommand(pullCmd);
 
@@ -95,11 +97,14 @@ namespace SCMApp {
 
       var setUrlCmd = new Command("set-url", "Update remote origin URL.");
       setUrlCmd.AddArgument(new Argument("remoteUrl"));
+      // 'set-url' with or without '--upstream'
+      upstreamOption = new Option<bool>(new[] {"--upstream", "-u"}, "Set remote upstream URL!");
+      setUrlCmd.AddOption(upstreamOption);
 
       setUrlCmd.Handler = System.CommandLine.Invocation.CommandHandler
-        .Create<string, string>(async (repoPath, remoteUrl) =>
+        .Create<string, string, bool>(async (repoPath, remoteUrl, upstream) =>
       {
-        await scmAppCLA.Run(GitUtility.SCMAction.UpdateRemote, repoPath, remoteUrl, false);
+        await scmAppCLA.Run(GitUtility.SCMAction.UpdateRemote, repoPath, remoteUrl, upstream);
       });
       rootCmd.AddCommand(setUrlCmd);
 
@@ -140,8 +145,8 @@ namespace SCMApp {
     ///     file path      when 'push mod single'
     ///     special string when 'push mod all'
     /// </param>
-    public async Task Run(GitUtility.SCMAction action, string repoPath, string firstParam,
-      bool shouldAmend=false)
+    public async Task Run(GitUtility.SCMAction action, string repoPath, string strParam,
+      bool bParam=false)
     {
       if (repoPath.EndsWith('\\'))
         repoPath = repoPath.Substring(0, repoPath.Length - 1);
@@ -150,19 +155,19 @@ namespace SCMApp {
 
       switch (action) {
       case GitUtility.SCMAction.PushModified:
-        await app.SCPChanges(firstParam, shouldAmend);
+        await app.SCPChanges(strParam, bParam);
         break;
 
       case GitUtility.SCMAction.DeleteBranch:
-        await app.DeleteBranch(firstParam);
+        await app.DeleteBranch(strParam);
         break;
 
       case GitUtility.SCMAction.UpdateRemote:
-        app.UpdateRemoteURL("origin", firstParam);
+        app.UpdateRemoteURL(bParam ? "upstream": "origin", strParam);
         break;
 
       case GitUtility.SCMAction.Pull:
-        app.PullChanges();
+        await app.PullChanges(bParam);
         break;
 
       case GitUtility.SCMAction.ShowInfo:

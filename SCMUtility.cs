@@ -21,6 +21,7 @@ namespace SCMApp {
     public enum SCMAction {
       PushModified,
       UpdateRemote,
+      DeleteBranch,
       ShowInfo,
       ShowStatus,
       Pull
@@ -62,7 +63,13 @@ namespace SCMApp {
     /// Get short commit sha id: 9 alpha digits
     /// Truncate the tip of the Head
     /// </summary>
-    private string GetShaShort() => Repo.Head.Tip.Id.ToString().Substring(0, 9);
+    private string GetShaShort() {
+      if (Repo.Head.Tip == null) {
+        Console.WriteLine("Head doesn't exist yet! Yet to do a first commit and create branch?");
+        return string.Empty;
+      }
+      return Repo.Head.Tip.Id.ToString().Substring(0, 9); 
+    }
 
 
     /// <summary>
@@ -200,8 +207,9 @@ namespace SCMApp {
           }
         }
 
-        if (System.IO.File.Exists(filePath)) {
-          Console.WriteLine("* " + filePath);
+        var isDir = System.IO.Directory.Exists(filePath);
+        if (System.IO.File.Exists(filePath) || isDir) {
+          Console.WriteLine((isDir? "* d " : "* ") + filePath);
           Repo.Index.Add(filePath);
           Repo.Index.Write();
           isModified = true;
@@ -268,6 +276,18 @@ namespace SCMApp {
       // Use Logger Verbose
       Console.WriteLine("committed with amend flag: " + shouldAmend);
       Console.WriteLine("and message:\r\n" + await GetCommitMessage(singleLine: true));
+
+      // Test this with an initialized repo (no commits)
+      //  ref, https://github.com/libgit2/libgit2sharp/issues/802
+      var branches = new EnumerableType<Branch>(Repo.Branches.GetEnumerator());
+      var branch = branches.First();
+      
+      if (branch == null) {
+        // should trigger right after a 'git init'
+        branch = Repo.Branches.Add("dev", commit);
+        // Update the HEAD reference to point to the latest commit
+        Repo.Refs.UpdateTarget(Repo.Refs.Head, commit.Id);
+      }
     }
 
     /// <summary>
@@ -321,7 +341,13 @@ namespace SCMApp {
     /// Push commits to remote
     ///  does force push when --amend flag is present
     /// <remarks>
-    /// pertinent to push ref spec used in Network.Push
+    /// For a brand new git repository just initialized with no head and no branch
+    ///  set name of the branch to be created as 'dev'
+    ///
+    /// - push ref spec primary attribution,
+    ///  <see href="https://git-scm.com/book/en/v2/Git-Internals-The-Refspec">Git Refspec</see>
+    ///
+    /// - pertinent to push ref spec used in Network.Push
     /// <see href="https://stackoverflow.com/q/47294514">
     ///  SO - libgit2sharp Git cannot push non-fastforwardable reference
     /// </see>
@@ -332,21 +358,20 @@ namespace SCMApp {
       // Use Logger Verbose
       var originBranchStr = "origin/" + targetBranch;
       Console.WriteLine("origin branch string: " + originBranchStr + " does Remote Origin Target " +
-        "Branch Exist: " + (Repo.Branches[originBranchStr] == null));
+        "Branch Exist: " + (Repo.Branches[originBranchStr] != null));
 
       LibGit2Sharp.Handlers.PackBuilderProgressHandler packBuilderCb = (x, y, z) => {
         Console.WriteLine($"{x} {y} {z}");
         return true;
       };
 
-      var options = new PushOptions() {
-          OnPushStatusError = OnPushStatusError,
-          OnPackBuilderProgress = packBuilderCb,
-      };
-
       // Config is not instantiated if commit was not called
       await InstantiateJsonConfig();
-      options.CredentialsProvider = Config.GetCredentials();
+      var options = new PushOptions() {
+          CredentialsProvider = Config.GetCredentials(),
+          OnPushStatusError = OnPushStatusError,
+          OnPackBuilderProgress = packBuilderCb,
+        };
 
       try {
         var formatSpec = (shouldForce || Repo.Branches[originBranchStr] == null)? "+{0}:{0}" : "{0}";
@@ -419,15 +444,45 @@ namespace SCMApp {
     /// Add/update remote URL
     /// Only supports one remote right now which is 'origin'
     /// </summary>
+    /// <param name="remoteName">remote name i.e., origin or upstream</param>
     /// <param name="remoteURL">remote's URL</param>
-    public void UpdateRemoteURL(string remoteURL) {
-      var remoteName = "origin";
+    public void UpdateRemoteURL(string remoteName, string remoteURL) {
       if (Repo.Network.Remotes[remoteName] == null)
         Repo.Network.Remotes.Add(remoteName, remoteURL);
       else {
         Repo.Network.Remotes.Update(remoteName, r => r.Url = remoteURL);
         Repo.Network.Remotes.Update(remoteName, r => r.PushUrl = remoteURL);
       }
+    }
+
+    /// <summary>
+    /// Delete specified branch from local and remote
+    ///  Use the Push Refspec till API support for remote deletion is found
+    ///
+    /// - push ref spec primary attribution,
+    ///  <see href="https://git-scm.com/book/en/v2/Git-Internals-The-Refspec">Git Refspec</see>
+    /// </summary>
+    /// <param name="branchName">branch name</param>
+    public async Task DeleteBranch(string branchName) {
+      if (Repo.Branches[branchName] == null) {
+        Console.WriteLine($"Branch {branchName} does not exist!");
+        return ;
+      }
+
+      Console.WriteLine($"Branch {branchName}");
+
+      var formatSpecDelRBranch = ":{0}";
+      var pushRefSpec = string.Format(formatSpecDelRBranch, Repo.Branches[branchName].CanonicalName);
+
+      // instantiate config
+      await InstantiateJsonConfig();
+      var options = new PushOptions() { CredentialsProvider = Config.GetCredentials() };
+
+      Repo.Network.Push(Repo.Network.Remotes["origin"], pushRefSpec, options);
+      Console.WriteLine("- removed from remote (NoOp if already removed)");
+
+      Repo.Branches.Remove(branchName, false);
+      Console.WriteLine("- removed from local");
     }
   }
 }

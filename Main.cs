@@ -103,6 +103,16 @@ namespace SCMApp {
       });
       rootCmd.AddCommand(setUrlCmd);
 
+      var delBrCmd = new Command("delete-branch", "Delete branch from local and remote.");
+      delBrCmd.AddArgument(new Argument("branchName"));
+
+      delBrCmd.Handler = System.CommandLine.Invocation.CommandHandler
+        .Create<string, string>(async (repoPath, branchName) =>
+      {
+        await scmAppCLA.Run(GitUtility.SCMAction.DeleteBranch, repoPath, branchName, false);
+      });
+      rootCmd.AddCommand(delBrCmd);
+
       // POSIX style arguments
       var rpOption = new Option<string>("--repo-path", "Path of the repo");
       rootCmd.AddOption(rpOption);
@@ -119,7 +129,19 @@ namespace SCMApp {
     /// <summary>
     /// Automaton of the app
     /// </summary>
-    public async Task Run(GitUtility.SCMAction action, string repoPath, string filePath, bool shouldAmend=false)
+    /// <remarks>
+    ///  
+    /// </remarks>
+    /// <param name="firstParam">
+    /// Polymorphic parameter, refers to different things based on different action:
+    ///  - DeleteBranch: branch name
+    ///  - UpdateRemote: remote URL
+    ///  - PushModified:
+    ///     file path      when 'push mod single'
+    ///     special string when 'push mod all'
+    /// </param>
+    public async Task Run(GitUtility.SCMAction action, string repoPath, string firstParam,
+      bool shouldAmend=false)
     {
       if (repoPath.EndsWith('\\'))
         repoPath = repoPath.Substring(0, repoPath.Length - 1);
@@ -128,12 +150,15 @@ namespace SCMApp {
 
       switch (action) {
       case GitUtility.SCMAction.PushModified:
-        await app.SCPChanges(filePath, shouldAmend);
+        await app.SCPChanges(firstParam, shouldAmend);
+        break;
+
+      case GitUtility.SCMAction.DeleteBranch:
+        await app.DeleteBranch(firstParam);
         break;
 
       case GitUtility.SCMAction.UpdateRemote:
-        // filePath here is remote URL
-        app.UpdateRemoteURL(filePath);
+        app.UpdateRemoteURL("origin", firstParam);
         break;
 
       case GitUtility.SCMAction.Pull:

@@ -234,7 +234,8 @@ namespace SCMApp {
             filePath = filePath.Substring(repoPath.Length + 1);
 
           var statiqPostsPath = @"input\posts";
-          if (System.IO.Directory.Exists(statiqPostsPath) && filePath.EndsWith(".md")) {
+          if (System.IO.Directory.Exists(statiqPostsPath) && filePath.EndsWith(".md") && !filePath
+              .StartsWith(statiqPostsPath)) {
             var newFilePath = statiqPostsPath + '\\' + filePath;
             if (System.IO.File.Exists(newFilePath))
               filePath = newFilePath;
@@ -362,9 +363,8 @@ namespace SCMApp {
       var lMsg = await GetCommitMessage();
 
       // Logger Verbose
-      // Console.WriteLine("comparison result: " + (rMsg == lMsg));
-      // return false;
-      return rMsg != lMsg;
+      // Console.WriteLine("comparison result: " + (rMsg.Trim() != lMsg.Trim()));
+      return rMsg.Trim() != lMsg.Trim();
     }
 
     private void OnPushStatusError(PushStatusError pushStatusErrors) {

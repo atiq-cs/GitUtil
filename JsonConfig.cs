@@ -5,6 +5,7 @@ namespace SCMApp {
   using System;
   using System.Threading.Tasks;
   using System.Collections.Generic;
+  using System.Text.Json;
 
   /// <summary>
   /// Credentials Related
@@ -35,6 +36,8 @@ namespace SCMApp {
         throw new InvalidOperationException($"Required config: {JsonConfigFilePath} not found!" + 
           "Please create the config file and run this application again.");
       }
+
+      UserCred = new UserCredential();
     }
 
     /// <summary>
@@ -54,6 +57,16 @@ namespace SCMApp {
       public string GithubToken { get; set; }
       public string CommitLogFilePath { get; set; }
       public HashSet<string> Dirs { get; set; }
+
+      /// <summary>
+      /// Source Control Provider
+      /// </summary>
+      public string SCProvider { get; set; }
+
+      public UserCredential() {
+        // market that the variable doesn't have an account 'Loaded' into it yet
+        SCProvider = string.Empty;
+      }
     }
 
 
@@ -66,29 +79,56 @@ namespace SCMApp {
     public async Task Load(string fullNameFromRepo, string emailFromRepo, string repoPath) {
       using System.IO.FileStream openStream = System.IO.File.OpenRead(JsonConfigFilePath);
 
-      var root = await System.Text.Json.JsonSerializer.DeserializeAsync<Dictionary
-        <string, UserCredential>>(openStream);
+      var rootElement = await JsonSerializer.DeserializeAsync<JsonElement>(openStream);
 
-      if (! root.ContainsKey("default"))
-        throw new InvalidOperationException($"Invalid json config file '{JsonConfigFilePath}': field " +
-          "'default' missing!");
+      // find account to use; based on the dirList
+      var servicesJson = rootElement.GetProperty("services");
+      var services = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(servicesJson);
 
-      if (! root.ContainsKey("specified"))
-        throw new InvalidOperationException($"Invalid json config file '{JsonConfigFilePath}': field " +
-          "'specified' missing!");
+      foreach(var service in services) {
+        var SCAccountsJson = service.Value;
+        var SCAccounts = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(SCAccountsJson);
 
-      UserCred = root["default"];
-      var spCred = root["specified"];
-      var dirList = spCred.Dirs;
+        foreach(var SCAccount in SCAccounts) {
+          JsonElement specifiedDirsJson;
+          if (SCAccount.Value.TryGetProperty("Dirs", out specifiedDirsJson)) {
+            var dirList = JsonSerializer.Deserialize<HashSet<string>>(specifiedDirsJson);
+            if (dirList.Contains(repoPath)) {
+              UserCred.UserName = SCAccount.Key;
 
-      if (dirList == null)
-        throw new InvalidOperationException($"Invalid json config file '{JsonConfigFilePath}': "
-          + "field 'Dirs' missing!");
+              // Print selected user to help finding duplicate Dir Entries, in case they exist
+              Console.WriteLine($"Selected account: {UserCred.UserName}");
 
-      if (dirList.Contains(repoPath)) {
-        Console.WriteLine("Setting specified config for this repository.");
+              UserCred.GithubToken = SCAccount.Value.GetProperty("GithubToken").GetString();
+              UserCred.Email = SCAccount.Value.GetProperty("Email").GetString();
+              UserCred.FullName = SCAccount.Value.GetProperty("FullName").GetString();
+              UserCred.CommitLogFilePath = SCAccount.Value.GetProperty("CommitLogFilePath").GetString();
 
-        UserCred = spCred;
+              UserCred.SCProvider = service.Key;
+              break;
+            }
+          }
+        }
+        if (UserCred.SCProvider != string.Empty)
+          break;
+      }
+
+      if (UserCred.SCProvider == string.Empty) {
+        // get default account
+        var appSettingsJson = rootElement.GetProperty("application");
+        var defaultSCProvider = appSettingsJson.GetProperty("SCProvider").GetString();
+        var defaultUserName = appSettingsJson.GetProperty("UserName").GetString();
+
+        var defaultService = services[defaultSCProvider];
+        var defaultAccount = defaultService.GetProperty(defaultUserName);
+
+        UserCred.UserName = defaultUserName;
+        UserCred.GithubToken = defaultAccount.GetProperty("GithubToken").GetString();
+        UserCred.Email = defaultAccount.GetProperty("Email").GetString();
+        UserCred.FullName = defaultAccount.GetProperty("FullName").GetString();
+        UserCred.CommitLogFilePath = defaultAccount.GetProperty("CommitLogFilePath").GetString();
+
+        UserCred.SCProvider = defaultSCProvider;
       }
 
       if (fullNameFromRepo != UserCred.FullName || emailFromRepo != UserCred.Email)

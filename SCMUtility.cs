@@ -94,12 +94,21 @@ namespace SCMApp {
 
     public void ShowRepoAndUserInfo() {
       Console.WriteLine("Local Repo: " + GetRepoPath());
+      // or, GetValueOrDefault<string>
       var username = Repo.Config.Get<string>("user.name").Value;
       Console.WriteLine("Author: " + username);
       var email = Repo.Config.Get<string>("user.email").Value;
       Console.WriteLine("Email: " + email);
       Console.WriteLine("Branch: " + Repo.Head);
       Console.WriteLine("SHA: " + GetShaShort());
+
+      Console.WriteLine(Environment.NewLine + "Global Config:");
+      if (Repo.Config.HasConfig(ConfigurationLevel.Global)) {
+        username = Repo.Config.Get<string>("user.name", ConfigurationLevel.Global).Value;
+        Console.WriteLine("Author: " + username);
+        email = Repo.Config.Get<string>("user.email", ConfigurationLevel.Global).Value;
+        Console.WriteLine("Email: " + email);
+      }
     }
 
     private async Task InstantiateJsonConfig() {

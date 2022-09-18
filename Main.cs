@@ -4,6 +4,7 @@
 namespace SCMApp {
   using System.Threading.Tasks;
   using System.CommandLine;
+  using System.CommandLine.NamingConventionBinder;
 
   class SCMAppMain {
     /// <summary>
@@ -27,9 +28,13 @@ namespace SCMApp {
       // 'push mod' with or without '--amend'
       var amendOption = new Option<bool>(new[] {"--amend", "-f"}, "Amend last commit and force push"
         + "!");
+      // delete if -f works with above code
+      // var amendOption = new Option<bool>("--amend", "Amend last commit and force push"
+      //   + "!");
+      // amendOption.AddAlias("-f");
       modSubCmd.AddOption(amendOption);
 
-      modSubCmd.Handler = System.CommandLine.NamingConventionBinder.CommandHandler
+      modSubCmd.Handler = CommandHandler
         .Create<string, bool>(async (repoPath, amend) =>
       {
         if (amend)
@@ -43,9 +48,10 @@ namespace SCMApp {
       // push single
       var singleSubCmd = new Command("single", "Add a file to commit and push.");
       singleSubCmd.AddAlias("single-file");
-      singleSubCmd.AddArgument(new Argument("filePath"));
+      // Argument does not have an AddAlias method
+      singleSubCmd.AddArgument(new Argument<string>("filePath", "Path of the file to add to commmit."));
 
-      singleSubCmd.Handler = System.CommandLine.NamingConventionBinder.CommandHandler
+      singleSubCmd.Handler = CommandHandler
         .Create<string, string, bool>(async (repoPath, filePath, amend) =>
       {
         await scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, filePath, amend);
@@ -56,7 +62,7 @@ namespace SCMApp {
       // push all
       var allSubCmd = new Command("all", "Add all files to commit and push.");
 
-      allSubCmd.Handler = System.CommandLine.NamingConventionBinder.CommandHandler
+      allSubCmd.Handler = CommandHandler
         .Create<string, bool>(async (repoPath, amend) =>
       {
         // hacky string, consumed by StageGeneric()
@@ -70,7 +76,7 @@ namespace SCMApp {
       var pullCmd = new Command("pull", "Pull changes from repository.");
       var upstreamOption = new Option<bool>(new[] {"--upstream", "-u"}, "pull from upstream");
       pullCmd.AddOption(upstreamOption);
-      pullCmd.Handler = System.CommandLine.NamingConventionBinder.CommandHandler
+      pullCmd.Handler = CommandHandler
         .Create<string, bool>(async (repoPath, upstream) =>
       {
         await scmAppCLA.Run(GitUtility.SCMAction.Pull, repoPath, string.Empty, upstream);
@@ -79,7 +85,7 @@ namespace SCMApp {
 
       var infoCmd = new Command("info", "Show information about repository.");
       infoCmd.AddAlias("information");
-      infoCmd.Handler = System.CommandLine.NamingConventionBinder.CommandHandler
+      infoCmd.Handler = CommandHandler
         .Create<string>(async (repoPath) =>
       {
         await scmAppCLA.Run(GitUtility.SCMAction.ShowInfo, repoPath, string.Empty);
@@ -88,7 +94,7 @@ namespace SCMApp {
 
       var statusCmd = new Command("status", "Show status on changes (including commit message).");
       statusCmd.AddAlias("stat");
-      statusCmd.Handler = System.CommandLine.NamingConventionBinder.CommandHandler
+      statusCmd.Handler = CommandHandler
         .Create<string>(async (repoPath) =>
       {
         await scmAppCLA.Run(GitUtility.SCMAction.ShowStatus, repoPath, string.Empty);
@@ -96,12 +102,12 @@ namespace SCMApp {
       rootCmd.AddCommand(statusCmd);
 
       var setUrlCmd = new Command("set-url", "Update remote origin URL.");
-      setUrlCmd.AddArgument(new Argument("remoteUrl"));
+      setUrlCmd.AddArgument(new Argument<string>("remoteUrl"));
       // 'set-url' with or without '--upstream'
       upstreamOption = new Option<bool>(new[] {"--upstream", "-u"}, "Set remote upstream URL!");
       setUrlCmd.AddOption(upstreamOption);
 
-      setUrlCmd.Handler = System.CommandLine.NamingConventionBinder.CommandHandler
+      setUrlCmd.Handler = CommandHandler
         .Create<string, string, bool>(async (repoPath, remoteUrl, upstream) =>
       {
         await scmAppCLA.Run(GitUtility.SCMAction.UpdateRemote, repoPath, remoteUrl, upstream);
@@ -109,9 +115,9 @@ namespace SCMApp {
       rootCmd.AddCommand(setUrlCmd);
 
       var delBrCmd = new Command("delete-branch", "Delete branch from local and remote.");
-      delBrCmd.AddArgument(new Argument("branchName"));
+      delBrCmd.AddArgument(new Argument<string>("branchName"));
 
-      delBrCmd.Handler = System.CommandLine.NamingConventionBinder.CommandHandler
+      delBrCmd.Handler = CommandHandler
         .Create<string, string>(async (repoPath, branchName) =>
       {
         await scmAppCLA.Run(GitUtility.SCMAction.DeleteBranch, repoPath, branchName, false);

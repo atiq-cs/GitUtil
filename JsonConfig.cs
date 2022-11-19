@@ -64,7 +64,7 @@ namespace SCMApp {
       public string SCProvider { get; set; }
 
       public UserCredential() {
-        // market that the variable doesn't have an account 'Loaded' into it yet
+        // mark that the variable doesn't have an account 'Loaded' into it yet
         SCProvider = string.Empty;
       }
     }

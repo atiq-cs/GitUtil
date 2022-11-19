@@ -103,6 +103,7 @@ namespace SCMApp {
       Console.WriteLine("SHA: " + GetShaShort());
 
       Console.WriteLine(Environment.NewLine + "Global Config:");
+      // ref: `LibGit2Sharp/Configuration.cs`
       if (Repo.Config.HasConfig(ConfigurationLevel.Global)) {
         username = Repo.Config.Get<string>("user.name", ConfigurationLevel.Global).Value;
         Console.WriteLine("Author: " + username);

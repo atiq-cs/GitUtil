@@ -162,25 +162,34 @@ namespace SCMApp {
     /// Pull changes from remote
     /// </summary>
     /// <remarks>
+    /// ref, Test: NetworkFixture.cs
     /// does not support pull from private repository
     ///  TODO: test with private
     /// </remarks>
     public async Task PullChanges(bool isRemoteUpstream) {
       // will be rquired if repository requires authentication
       // await InstantiateJsonConfig();
-      var options = new PullOptions() {
+      var fetchOptions = new PullOptions() {
         FetchOptions = new FetchOptions() /*{
           CredentialsProvider = Config.GetCredentials(),
         },*/
+      };
+      var options = new PullOptions() {
+        MergeOptions = new MergeOptions() {
+            FastForwardStrategy = FastForwardStrategy.Default
+        }
       };
 
       var signature = Repo.Config.BuildSignature(DateTimeOffset.Now);
       // TODO: add an optional argument to provide this
       var remoteBranchName = "main";    // usually main for GitHub etc.
+      var previousSha = GetShaShort();
 
       try {
-        if (! isRemoteUpstream)
-          Commands.Pull(Repo, signature, options);
+        if (! isRemoteUpstream) {
+          MergeResult mergeResult = Commands.Pull(Repo, signature, options);
+          Console.WriteLine($"Merge result: {mergeResult.Status}");
+          }
         else {
           var remoteName = "upstream";
           var refSpec = string.Format("refs/heads/{2}:refs/remotes/{0}/{1}", remoteName, Repo.Head.FriendlyName, remoteBranchName);
@@ -189,23 +198,29 @@ namespace SCMApp {
 
           // Perform the actual fetch
           Commands.Fetch(Repo, remoteName, new string[] { refSpec },
-            options.FetchOptions,
+            fetchOptions.FetchOptions,
             null
           );
           // Merge fetched refs
-          Repo.MergeFetchedRefs(signature, options.MergeOptions);
+          MergeResult mergeResult = Repo.MergeFetchedRefs(signature, fetchOptions.MergeOptions);
+          Console.WriteLine($"Merge result: {mergeResult.Status}");
         }
       }
       catch (CheckoutConflictException e) {
-          Console.WriteLine(e.Message);
+          Console.WriteLine("Conflict: " + e.Message);
           return ;
       }
       catch (LibGit2Sharp.MergeFetchHeadNotFoundException e) {
         Console.WriteLine($"{remoteBranchName} does not exist! " + e.Message);
         return ;
       }
+      // catch any other exception thrown
+      catch (LibGit2SharpException e) {
+          Console.WriteLine(e.Message);
+          return ;
+      }
 
-      Console.WriteLine($"{Repo.Head} -> {GetShaShort()}");
+      Console.WriteLine($"{Repo.Head}: {previousSha} -> {GetShaShort()}");
     }
 
     /// <summary>
@@ -405,6 +420,10 @@ namespace SCMApp {
       Console.WriteLine("origin branch string: " + originBranchStr + " does Remote Origin Target " +
         "Branch Exist: " + (Repo.Branches[originBranchStr] != null));
 
+      // Example output, Q: What's counting?
+      // Counting 1 0
+      // Deltafying 0 3
+      // Deltafying 3 3
       LibGit2Sharp.Handlers.PackBuilderProgressHandler packBuilderCb = (x, y, z) => {
         Console.WriteLine($"{x} {y} {z}");
         return true;

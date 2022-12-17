@@ -35,13 +35,13 @@ namespace SCMApp {
       modSubCmd.AddOption(amendOption);
 
       modSubCmd.Handler = CommandHandler
-        .Create<string, bool>(async (repoPath, amend) =>
+        .Create<string, bool>((repoPath, amend) =>
       {
         if (amend)
           System.Console.WriteLine("Amend/Force flag is set. This will amend last comment and force push "
             + "to remote!");
 
-        await scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, string.Empty, amend);
+        scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, string.Empty, amend);
       });
       pushCmd.AddCommand(modSubCmd);
 
@@ -52,9 +52,9 @@ namespace SCMApp {
       singleSubCmd.AddArgument(new Argument<string>("filePath", "Path of the file to add to commmit."));
 
       singleSubCmd.Handler = CommandHandler
-        .Create<string, string, bool>(async (repoPath, filePath, amend) =>
+        .Create<string, string, bool>((repoPath, filePath, amend) =>
       {
-        await scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, filePath, amend);
+        scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, filePath, amend);
       });
       singleSubCmd.AddOption(amendOption);    // Support --amend switch
       pushCmd.AddCommand(singleSubCmd);
@@ -63,10 +63,10 @@ namespace SCMApp {
       var allSubCmd = new Command("all", "Add all files to commit and push.");
 
       allSubCmd.Handler = CommandHandler
-        .Create<string, bool>(async (repoPath, amend) =>
+        .Create<string, bool>((repoPath, amend) =>
       {
         // hacky string, consumed by StageGeneric()
-        await scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, "__cmdOption:--all", amend);
+        scmAppCLA.Run(GitUtility.SCMAction.PushModified, repoPath, "__cmdOption:--all", amend);
       });
       allSubCmd.AddOption(amendOption);     // Support --amend switch
       pushCmd.AddCommand(allSubCmd);
@@ -77,27 +77,27 @@ namespace SCMApp {
       var upstreamOption = new Option<bool>(new[] {"--upstream", "-u"}, "pull from upstream");
       pullCmd.AddOption(upstreamOption);
       pullCmd.Handler = CommandHandler
-        .Create<string, bool>(async (repoPath, upstream) =>
+        .Create<string, bool>((repoPath, upstream) =>
       {
-        await scmAppCLA.Run(GitUtility.SCMAction.Pull, repoPath, string.Empty, upstream);
+        scmAppCLA.Run(GitUtility.SCMAction.Pull, repoPath, string.Empty, upstream);
       });
       rootCmd.AddCommand(pullCmd);
 
       var infoCmd = new Command("info", "Show information about repository.");
       infoCmd.AddAlias("information");
       infoCmd.Handler = CommandHandler
-        .Create<string>(async (repoPath) =>
+        .Create<string>((repoPath) =>
       {
-        await scmAppCLA.Run(GitUtility.SCMAction.ShowInfo, repoPath, string.Empty);
+        scmAppCLA.Run(GitUtility.SCMAction.ShowInfo, repoPath, string.Empty);
       });
       rootCmd.AddCommand(infoCmd);
 
       var statusCmd = new Command("status", "Show status on changes (including commit message).");
       statusCmd.AddAlias("stat");
       statusCmd.Handler = CommandHandler
-        .Create<string>(async (repoPath) =>
+        .Create<string>((repoPath) =>
       {
-        await scmAppCLA.Run(GitUtility.SCMAction.ShowStatus, repoPath, string.Empty);
+        scmAppCLA.Run(GitUtility.SCMAction.ShowStatus, repoPath, string.Empty);
       });
       rootCmd.AddCommand(statusCmd);
 
@@ -108,9 +108,9 @@ namespace SCMApp {
       setUrlCmd.AddOption(upstreamOption);
 
       setUrlCmd.Handler = CommandHandler
-        .Create<string, string, bool>(async (repoPath, remoteUrl, upstream) =>
+        .Create<string, string, bool>((repoPath, remoteUrl, upstream) =>
       {
-        await scmAppCLA.Run(GitUtility.SCMAction.UpdateRemote, repoPath, remoteUrl, upstream);
+        scmAppCLA.Run(GitUtility.SCMAction.UpdateRemote, repoPath, remoteUrl, upstream);
       });
       rootCmd.AddCommand(setUrlCmd);
 
@@ -118,9 +118,9 @@ namespace SCMApp {
       delBrCmd.AddArgument(new Argument<string>("branchName"));
 
       delBrCmd.Handler = CommandHandler
-        .Create<string, string>(async (repoPath, branchName) =>
+        .Create<string, string>((repoPath, branchName) =>
       {
-        await scmAppCLA.Run(GitUtility.SCMAction.DeleteBranch, repoPath, branchName, false);
+        scmAppCLA.Run(GitUtility.SCMAction.DeleteBranch, repoPath, branchName, false);
       });
       rootCmd.AddCommand(delBrCmd);
 
@@ -151,7 +151,7 @@ namespace SCMApp {
     ///     file path      when 'push mod single'
     ///     special string when 'push mod all'
     /// </param>
-    public async Task Run(GitUtility.SCMAction action, string repoPath, string strParam,
+    public void Run(GitUtility.SCMAction action, string repoPath, string strParam,
       bool bParam=false)
     {
       if (repoPath == null)
@@ -164,11 +164,11 @@ namespace SCMApp {
 
       switch (action) {
       case GitUtility.SCMAction.PushModified:
-        await app.SCPChanges(strParam, bParam);
+        app.SCPChanges(strParam, bParam);
         break;
 
       case GitUtility.SCMAction.DeleteBranch:
-        await app.DeleteBranch(strParam);
+        app.DeleteBranch(strParam);
         break;
 
       case GitUtility.SCMAction.UpdateRemote:
@@ -176,7 +176,7 @@ namespace SCMApp {
         break;
 
       case GitUtility.SCMAction.Pull:
-        await app.PullChanges(bParam);
+        app.PullChanges(bParam);
         break;
 
       case GitUtility.SCMAction.ShowInfo:
@@ -184,7 +184,7 @@ namespace SCMApp {
         break;
 
       case GitUtility.SCMAction.ShowStatus:
-        await app.ShowStatus();
+        app.ShowStatus();
         break;
 
       default:

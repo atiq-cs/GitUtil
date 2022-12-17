@@ -22,13 +22,18 @@ namespace SCMApp {
     /// </summary>
     private string JsonConfigFilePath { get; set; }
 
-
+    /// <summary>
+    /// Read and Parse Config file
+    ///
     /// <remarks>
     /// <see href="https://docs.microsoft.com/en-us/dotnet/api/system.environment.specialfolder">
     /// Accessing Local App Data via Environment
     /// </see>
     /// </remarks>
-    public JsonConfig() {
+    /// <param name="fullNameFromRepo">Full Name in Repo Config</param>
+    /// <param name="emailFromRepo">Email Address in Repo Config</param>
+    /// <param name="repoPath">Repository Dir/Path</param>
+    public JsonConfig(string fullNameFromRepo, string emailFromRepo, string repoPath) {
       JsonConfigFilePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
         + @"\GitUtilConfig.json";
 
@@ -38,48 +43,11 @@ namespace SCMApp {
       }
 
       UserCred = new UserCredential();
-    }
 
-    /// <summary>
-    /// Structure to read records from config file (json format)
-    /// </summary>
-    class UserCredential {
-      /// <summary>
-      /// Github user name for example, 'coolgeek'
-      /// </summary>
-      public string UserName { get; set; }
-      /// <summary>
-      /// Actual Name
-      /// <example> Esther Arkin </example>
-      /// </summary>
-      public string FullName { get; set; }
-      public string Email { get; set; }
-      public string GithubToken { get; set; }
-      public string CommitLogFilePath { get; set; }
-      public HashSet<string> Dirs { get; set; }
-
-      /// <summary>
-      /// Source Control Provider
-      /// </summary>
-      public string SCProvider { get; set; }
-
-      public UserCredential() {
-        // mark that the variable doesn't have an account 'Loaded' into it yet
-        SCProvider = string.Empty;
-      }
-    }
-
-
-    /// <summary>
-    /// Read and Parse Config file
-    /// </summary>
-    /// <param name="fullNameFromRepo">Full Name in Repo Config</param>
-    /// <param name="emailFromRepo">Email Address in Repo Config</param>
-    /// <param name="repoPath">Repository Dir/Path</param>
-    public async Task Load(string fullNameFromRepo, string emailFromRepo, string repoPath) {
       using System.IO.FileStream openStream = System.IO.File.OpenRead(JsonConfigFilePath);
 
-      var rootElement = await JsonSerializer.DeserializeAsync<JsonElement>(openStream);
+      // Since we're in constructor we cannot use async. Otherwise `DeserializeAsync`
+      var rootElement = JsonSerializer.Deserialize<JsonElement>(openStream);
 
       // find account to use; based on the dirList
       var servicesJson = rootElement.GetProperty("services");
@@ -133,6 +101,41 @@ namespace SCMApp {
 
       if (fullNameFromRepo != UserCred.FullName || emailFromRepo != UserCred.Email)
         throw new InvalidOperationException("Inavlid user name or email in git config!");
+    }
+
+    /// <summary>
+    /// Structure to read records from config file (json format)
+    /// </summary>
+    class UserCredential {
+      /// <summary>
+      /// Github user name for example, 'coolgeek'
+      /// </summary>
+      public string UserName { get; set; }
+      /// <summary>
+      /// Actual Name
+      /// <example> Esther Arkin </example>
+      /// </summary>
+      public string FullName { get; set; }
+      public string Email { get; set; }
+      public string GithubToken { get; set; }
+      public string CommitLogFilePath { get; set; }
+      public HashSet<string>? Dirs { get; set; }
+
+      /// <summary>
+      /// Source Control Provider
+      /// </summary>
+      public string SCProvider { get; set; }
+
+      public UserCredential() {
+        // mark that the variable doesn't have an account 'Loaded' into it yet
+        SCProvider = string.Empty;
+        UserName = string.Empty;
+        FullName = string.Empty;
+        Email = string.Empty;
+        GithubToken = string.Empty;
+        CommitLogFilePath = string.Empty;
+        Dirs = null;
+      }
     }
 
     /// <summary>

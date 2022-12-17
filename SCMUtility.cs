@@ -30,7 +30,7 @@ namespace SCMApp {
     /// <summary>
     /// Repository Instance
     /// </summary>
-    private Repository Repo { get; set; }
+    private Repository? Repo { get; set; }
     /// <summary>
     /// What Git Action to perform
     /// </summary>
@@ -38,7 +38,7 @@ namespace SCMApp {
     /// <summary>
     /// Configuration Instance
     /// </summary>
-    private JsonConfig Config { get; set; }
+    private JsonConfig? Config { get; set; }
 
     public GitUtility(SCMAction action, string repoPath, string filePath) {
       if (string.IsNullOrEmpty(repoPath))
@@ -112,16 +112,14 @@ namespace SCMApp {
       }
     }
 
-    private async Task InstantiateJsonConfig() {
+    private void InstantiateJsonConfig() {
       if (Config == null) {
-        // TODO: merge these 2 into constructor or something
-        Config = new JsonConfig();
-        await Config.Load(Repo.Config.Get<string>("user.name").Value, Repo.Config.
+        Config = new JsonConfig(Repo.Config.Get<string>("user.name").Value, Repo.Config.
           Get<string>("user.email").Value, GetRepoPath());
       }
     }
 
-    public async Task ShowStatus() {
+    public void ShowStatus() {
       ShowRepoAndUserInfo();
 
       var statusOps = new StatusOptions();
@@ -132,7 +130,7 @@ namespace SCMApp {
         Console.WriteLine((item.State == FileStatus.ModifiedInWorkdir? "*": " ") + " " + item.FilePath);
 
       Console.WriteLine(Environment.NewLine + "Message (to be used with next commit):");
-      Console.WriteLine(await GetCommitMessage(singleLine: true));
+      Console.WriteLine(GetCommitMessage(singleLine: true));
       Console.WriteLine("..." + Environment.NewLine);
     }
 
@@ -142,8 +140,8 @@ namespace SCMApp {
     /// </summary>
     /// <param name="singleLine">whether to return only first line</param>
     /// <returns>retrieved message</returns>
-    private async Task<string> GetCommitMessage(bool singleLine = false) {
-      await InstantiateJsonConfig();
+    private string GetCommitMessage(bool singleLine = false) {
+      InstantiateJsonConfig();
       var commitFilePath = Config.GetCommitFilePath();
 
       if (!System.IO.File.Exists(commitFilePath))
@@ -166,9 +164,9 @@ namespace SCMApp {
     /// does not support pull from private repository
     ///  TODO: test with private
     /// </remarks>
-    public async Task PullChanges(bool isRemoteUpstream) {
+    public void PullChanges(bool isRemoteUpstream) {
       // will be rquired if repository requires authentication
-      // await InstantiateJsonConfig();
+      // InstantiateJsonConfig();
       var fetchOptions = new PullOptions() {
         FetchOptions = new FetchOptions() /*{
           CredentialsProvider = Config.GetCredentials(),
@@ -193,7 +191,7 @@ namespace SCMApp {
         else {
           var remoteName = "upstream";
           var refSpec = string.Format("refs/heads/{2}:refs/remotes/{0}/{1}", remoteName, Repo.Head.FriendlyName, remoteBranchName);
-          await InstantiateJsonConfig();
+          InstantiateJsonConfig();
           Console.WriteLine($"pulling {remoteName}/{remoteBranchName}");
 
           // Perform the actual fetch
@@ -324,19 +322,19 @@ namespace SCMApp {
     /// * And, Amend ref,
     /// <see href="LibGit2Sharp.Tests/CommitFixture.cs">LibGit2Sharp CommitFixture Tests</see>
     /// </summary>
-    private async Task Commit(bool shouldAmend = false) {
+    private void Commit(bool shouldAmend = false) {
       Signature signature = Repo.Config.BuildSignature(DateTimeOffset.Now);
 
       // Commit to local repository
       Console.WriteLine("author name: " + signature.Name);
 
-      Commit commit = Repo.Commit(await GetCommitMessage(), signature, signature,
+      Commit commit = Repo.Commit(GetCommitMessage(), signature, signature,
         new CommitOptions { AmendPreviousCommit = shouldAmend });
 
       // Use Logger Verbose
       Console.WriteLine("committed with amend flag: " + shouldAmend);
       Console.WriteLine("and message:" + Environment.NewLine
-        + await GetCommitMessage(singleLine: true) + Environment.NewLine);
+        + GetCommitMessage(singleLine: true) + Environment.NewLine);
 
       // Test this with an initialized repo (no commits)
       //  ref, https://github.com/libgit2/libgit2sharp/issues/802
@@ -378,14 +376,14 @@ namespace SCMApp {
       return lastCommit?.Message;
     }
 
-    private async Task<bool> HasCommitLogChanged() {
+    private bool HasCommitLogChanged() {
       var rMsg = GetCommitMessageFromFirst();
 
       // Logger Verbose
       if (rMsg == null || rMsg == string.Empty)
         Console.WriteLine("failed to retrieve commit message!");
 
-      var lMsg = await GetCommitMessage();
+      var lMsg = GetCommitMessage();
 
       // Logger Verbose
       // Console.WriteLine("comparison result: " + (rMsg.Trim() != lMsg.Trim()));
@@ -413,7 +411,7 @@ namespace SCMApp {
     /// </see>
     /// </remarks>
     /// </summary>
-    private async Task PushToRemote(bool shouldForce = false) {
+    private void PushToRemote(bool shouldForce = false) {
       var targetBranch = Repo.Head.FriendlyName;
       // Use Logger Verbose
       var originBranchStr = "origin/" + targetBranch;
@@ -430,7 +428,7 @@ namespace SCMApp {
       };
 
       // Config is not instantiated if commit was not called
-      await InstantiateJsonConfig();
+      InstantiateJsonConfig();
       var options = new PushOptions() {
           CredentialsProvider = Config.GetCredentials(),
           OnPushStatusError = OnPushStatusError,
@@ -494,14 +492,14 @@ namespace SCMApp {
     /// </summary>
     /// <param name="filePath">file path passed with 'push single', Empty otherwise</param>
     /// <param name="shouldAmend">amend commit and force push</param>
-    public async Task SCPChanges(string filePath, bool shouldAmend = false) {
+    public void SCPChanges(string filePath, bool shouldAmend = false) {
       var isMod = StageHelper(filePath);
       if (isMod)
         Console.WriteLine("changes staged");
 
-      if (isMod || (shouldAmend && await HasCommitLogChanged()))
-        await Commit(shouldAmend);
-      await PushToRemote(shouldForce: shouldAmend);
+      if (isMod || (shouldAmend && HasCommitLogChanged()))
+        Commit(shouldAmend);
+      PushToRemote(shouldForce: shouldAmend);
     }
 
     /// <summary>
@@ -531,7 +529,7 @@ namespace SCMApp {
     ///  <see href="https://git-scm.com/book/en/v2/Git-Internals-The-Refspec">Git Refspec</see>
     /// </summary>
     /// <param name="branchName">branch name</param>
-    public async Task DeleteBranch(string branchName) {
+    public void DeleteBranch(string branchName) {
       if (Repo.Branches[branchName] == null) {
         Console.WriteLine($"Branch {branchName} does not exist!");
         return ;
@@ -543,7 +541,7 @@ namespace SCMApp {
       var pushRefSpec = string.Format(formatSpecDelRBranch, Repo.Branches[branchName].CanonicalName);
 
       // instantiate config
-      await InstantiateJsonConfig();
+      InstantiateJsonConfig();
       var options = new PushOptions() { CredentialsProvider = Config.GetCredentials() };
 
       Repo.Network.Push(Repo.Network.Remotes["origin"], pushRefSpec, options);

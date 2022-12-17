@@ -46,7 +46,9 @@ Example json config,
     }
 
 
-**CLA Examples**
+**CLA Examples**  
+*CLA Design follows POSIX style arguments.*
+
 Commands,
 
     GitUtility info
@@ -54,16 +56,29 @@ Commands,
     GitUtility pull
     GitUtility push mod --amend
 
-Example run with POSIX style arguments,
+Above commands assume we are inside the git repo directory.
 
-    GitUtility --repo-path D:\pwsh-scripts info
+To run while being outside of the repo dir, we have,
+
+    GitUtility --repo-path D:\CoolApp info
+
+Or, to specify an input json config file path,
+
     GitUtility --config-file-path D:\Workspace\Config.json info
+
+If it's not provided, default path is: `$Env:LOCALAPPDATA\GitUtilConfig.json`.
 
 `push mod` only pushes modified files.
 
-Other examples,
+**Info / Status related arguments**
 
-    dotnet run -- --repo-path D:\pwsh-scripts info
+Show basic information about the repository,
+
+    GitUtility --repo-path D:\CoolApp info
+
+Show modified files that will be added to next `push mod` command,
+
+    GitUtility --repo-path D:\CoolApp stat
 
 Please visit the design wiki for command line arguments (in reference section) to know more about the
 arguments.
@@ -72,12 +87,32 @@ To add a single file to commit and to push it to remote,
 
     GitUtility push single relative_file_path
 
+*Argument `push single` also supports `--amend` to overwrite the previous commit.*
+
 To add all files and to push,
 
     GitUtility push all
 
 
-All push supports --amend which allows modifying/ammending the last commit and pushing to remote.
+`push all` supports `--amend` which allows modifying/ammending the last commit and pushing to remote.
+
+**Remote URL examples**
+Set remote origin,
+
+    GitUtility set-url https://github.com/repo/project.git
+
+Set remote upstream (useful when you are only pulling changes from an upstream source, but pushing to your own repository),
+
+    GitUtility set-url https://github.com/repo/project.git --upstream
+
+#### Pull Examples
+Pull from remote upstream (set upstream before running this using example in previous section),
+
+    GitUtility pull --upstream
+
+To pull from origin,
+
+    GitUtility pull
 
 For help on CLA try,
 

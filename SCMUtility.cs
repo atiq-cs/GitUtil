@@ -39,6 +39,10 @@ namespace SCMApp {
     /// Configuration Instance
     /// </summary>
     private JsonConfig? Config { get; set; }
+    /// <summary>
+    /// Whether repository is in init stage
+    /// </summary>
+    private bool RepoInitStage { get; set; }
 
     public GitUtility(SCMAction action, string repoPath, string filePath) {
       if (string.IsNullOrEmpty(repoPath))
@@ -50,9 +54,28 @@ namespace SCMApp {
         Repo = new Repository(repoPath);
       }
       catch (RepositoryNotFoundException e) {
-        Console.WriteLine("Repo dir: " + repoPath);
-        Console.WriteLine(e.Message);
-        throw ;
+        Console.WriteLine("Repo dir: " + repoPath + " " + e.Message);
+
+        Console.WriteLine("Initialize a repository in this location: " + repoPath + "?");
+        var response = Console.ReadLine();
+        if (string.IsNullOrEmpty(response) || response[0] != 'Y' && response[0] != 'y')
+          throw ;
+        
+        // ref, LibGit2Sharp.Tests/PushFixture.cs
+        var res = Repository.Init(repoPath, isBare: false);
+        // Console.WriteLine("result: " + res);
+
+        Repo = new Repository(repoPath);
+        RepoInitStage = true;
+
+        // Cannot do branches Add here since we don't have the commit or commit SHA here..
+        // branch = Repo.Branches.Add("dev", commit);        
+        return ;
+      }
+      // catch any other exception thrown
+      catch (LibGit2SharpException e) {
+          Console.WriteLine(e.Message);
+          return ;
       }
  
       Action = action;
@@ -341,11 +364,24 @@ namespace SCMApp {
       var branches = new EnumerableType<Branch>(Repo.Branches.GetEnumerator());
       var branch = branches.First();
       
-      if (branch == null) {
+      if (RepoInitStage) {
+        Console.WriteLine("Branch init for LibGit2Sharp!");
         // should trigger right after a 'git init'
-        branch = Repo.Branches.Add("dev", commit);
+        // doesn't apply to LibGit2Sharp's Init which creates a master branch
+        // branch = Repo.Branches.Add("dev", commit);
+        branch = Repo.Branches.Rename("master", "dev");
         // Update the HEAD reference to point to the latest commit
-        Repo.Refs.UpdateTarget(Repo.Refs.Head, commit.Id);
+        // Repo.Refs.UpdateTarget(Repo.Refs.Head, branch);
+
+      }
+      else if (branch == null) {
+        Console.WriteLine("Branch init for git!");
+        // should trigger right after a 'git init'
+        // doesn't apply to LibGit2Sharp's Init which creates a master branch
+        branch = Repo.Branches.Add("dev", commit);
+        // TODO: change it to set active branch
+        // Update the HEAD reference to point to the latest commit
+        // Repo.Refs.UpdateTarget(Repo.Refs.Head, commit.Id);
       }
     }
 
@@ -499,7 +535,12 @@ namespace SCMApp {
 
       if (isMod || (shouldAmend && HasCommitLogChanged()))
         Commit(shouldAmend);
-      PushToRemote(shouldForce: shouldAmend);
+        
+      if (RepoInitStage) {
+        Console.WriteLine("Repo initialized. Please set remote origin and push again.");
+      }
+      else
+        PushToRemote(shouldForce: shouldAmend);
     }
 
     /// <summary>

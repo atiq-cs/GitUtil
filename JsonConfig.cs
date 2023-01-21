@@ -51,32 +51,36 @@ namespace SCMApp {
 
       // find account to use; based on the dirList
       var servicesJson = rootElement.GetProperty("services");
-      var services = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(servicesJson);
+      var services = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(servicesJson) ?? new Dictionary<string, JsonElement>();
 
       foreach(var service in services) {
         var SCAccountsJson = service.Value;
         var SCAccounts = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(SCAccountsJson);
 
-        foreach(var SCAccount in SCAccounts) {
-          JsonElement specifiedDirsJson;
-          if (SCAccount.Value.TryGetProperty("Dirs", out specifiedDirsJson)) {
-            var dirList = JsonSerializer.Deserialize<HashSet<string>>(specifiedDirsJson);
-            if (dirList.Contains(repoPath)) {
-              UserCred.UserName = SCAccount.Key;
+        if (SCAccounts is not null)
+          foreach(var SCAccount in SCAccounts) {
+            JsonElement specifiedDirsJson;
 
-              // Print selected user to help finding duplicate Dir Entries, in case they exist
-              Console.WriteLine($"Selected account: {UserCred.UserName}");
+            if (SCAccount.Value.TryGetProperty("Dirs", out specifiedDirsJson)) {
+              var dirList = JsonSerializer.Deserialize<HashSet<string>>(specifiedDirsJson)?? new HashSet<string>();
 
-              UserCred.GithubToken = SCAccount.Value.GetProperty("GithubToken").GetString();
-              UserCred.Email = SCAccount.Value.GetProperty("Email").GetString();
-              UserCred.FullName = SCAccount.Value.GetProperty("FullName").GetString();
-              UserCred.CommitLogFilePath = SCAccount.Value.GetProperty("CommitLogFilePath").GetString();
+              if (dirList.Contains(repoPath)) {
+                UserCred.UserName = SCAccount.Key;
 
-              UserCred.SCProvider = service.Key;
-              break;
+                // Print selected user to help finding duplicate Dir Entries, in case they exist
+                Console.WriteLine($"Selected account: {UserCred.UserName}");
+
+                UserCred.GithubToken = SCAccount.Value.GetProperty("GithubToken").GetString() ?? string.Empty;
+                UserCred.Email = SCAccount.Value.GetProperty("Email").GetString() ?? string.Empty;
+                UserCred.FullName = SCAccount.Value.GetProperty("FullName").GetString() ?? string.Empty;
+                UserCred.CommitLogFilePath = SCAccount.Value.GetProperty("CommitLogFilePath").GetString() ?? string.Empty;
+
+                UserCred.SCProvider = service.Key;
+                break;
+              }
             }
           }
-        }
+
         if (UserCred.SCProvider != string.Empty)
           break;
       }
@@ -84,17 +88,17 @@ namespace SCMApp {
       if (UserCred.SCProvider == string.Empty) {
         // get default account
         var appSettingsJson = rootElement.GetProperty("application");
-        var defaultSCProvider = appSettingsJson.GetProperty("SCProvider").GetString();
-        var defaultUserName = appSettingsJson.GetProperty("UserName").GetString();
+        var defaultSCProvider = appSettingsJson.GetProperty("SCProvider").GetString() ?? string.Empty;
+        var defaultUserName = appSettingsJson.GetProperty("UserName").GetString() ?? string.Empty;
 
         var defaultService = services[defaultSCProvider];
         var defaultAccount = defaultService.GetProperty(defaultUserName);
 
         UserCred.UserName = defaultUserName;
-        UserCred.GithubToken = defaultAccount.GetProperty("GithubToken").GetString();
-        UserCred.Email = defaultAccount.GetProperty("Email").GetString();
-        UserCred.FullName = defaultAccount.GetProperty("FullName").GetString();
-        UserCred.CommitLogFilePath = defaultAccount.GetProperty("CommitLogFilePath").GetString();
+        UserCred.GithubToken = defaultAccount.GetProperty("GithubToken").GetString() ?? string.Empty;
+        UserCred.Email = defaultAccount.GetProperty("Email").GetString() ?? string.Empty;
+        UserCred.FullName = defaultAccount.GetProperty("FullName").GetString() ?? string.Empty;
+        UserCred.CommitLogFilePath = defaultAccount.GetProperty("CommitLogFilePath").GetString() ?? string.Empty;
 
         UserCred.SCProvider = defaultSCProvider;
       }

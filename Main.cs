@@ -141,7 +141,8 @@ namespace SCMApp {
     /// Automaton of the app
     /// </summary>
     /// <remarks>
-    ///  
+    /// Usage of Ambiguous parameters -- horrible design
+    ///  TODO, probably get rid of this Run Method and call these app::methods directly
     /// </remarks>
     /// <param name="firstParam">
     /// Polymorphic parameter, refers to different things based on different action:

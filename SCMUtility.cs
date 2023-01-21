@@ -30,7 +30,7 @@ namespace SCMApp {
     /// <summary>
     /// Repository Instance
     /// </summary>
-    private Repository? Repo { get; set; }
+    private Repository Repo { get; set; }
     /// <summary>
     /// What Git Action to perform
     /// </summary>
@@ -38,7 +38,7 @@ namespace SCMApp {
     /// <summary>
     /// Configuration Instance
     /// </summary>
-    private JsonConfig? Config { get; set; }
+    private JsonConfig Config { get; set; }
     /// <summary>
     /// Whether repository is in init stage
     /// </summary>
@@ -67,20 +67,18 @@ namespace SCMApp {
 
         Repo = new Repository(repoPath);
         RepoInitStage = true;
-
         // Cannot do branches Add here since we don't have the commit or commit SHA here..
         // branch = Repo.Branches.Add("dev", commit);        
-        return ;
       }
       // catch any other exception thrown
       catch (LibGit2SharpException e) {
           Console.WriteLine(e.Message);
-          return ;
+          throw e;
       }
  
       Action = action;
-      
-      Config = null;
+      Config = new JsonConfig(Repo.Config.Get<string>("user.name").Value, Repo.Config.
+        Get<string>("user.email").Value, GetRepoPath());
     }
 
     /// <summary>
@@ -135,13 +133,6 @@ namespace SCMApp {
       }
     }
 
-    private void InstantiateJsonConfig() {
-      if (Config == null) {
-        Config = new JsonConfig(Repo.Config.Get<string>("user.name").Value, Repo.Config.
-          Get<string>("user.email").Value, GetRepoPath());
-      }
-    }
-
     public void ShowStatus() {
       ShowRepoAndUserInfo();
 
@@ -164,7 +155,6 @@ namespace SCMApp {
     /// <param name="singleLine">whether to return only first line</param>
     /// <returns>retrieved message</returns>
     private string GetCommitMessage(bool singleLine = false) {
-      InstantiateJsonConfig();
       var commitFilePath = Config.GetCommitFilePath();
 
       if (!System.IO.File.Exists(commitFilePath))
@@ -173,7 +163,7 @@ namespace SCMApp {
       if (singleLine)
         // Open the file to read from
         using (System.IO.StreamReader sr = System.IO.File.OpenText(commitFilePath)) {
-            return sr.ReadLine();;
+            return sr.ReadLine() ?? string.Empty;
         }
       else
         return System.IO.File.ReadAllText(commitFilePath);
@@ -214,7 +204,6 @@ namespace SCMApp {
         else {
           var remoteName = "upstream";
           var refSpec = string.Format("refs/heads/{2}:refs/remotes/{0}/{1}", remoteName, Repo.Head.FriendlyName, remoteBranchName);
-          InstantiateJsonConfig();
           Console.WriteLine($"pulling {remoteName}/{remoteBranchName}");
 
           // Perform the actual fetch
@@ -396,7 +385,7 @@ namespace SCMApp {
         Iter = iter;
       }
 
-      public T First() {
+      public T? First() {
         var first = default(T);
         
         if (Iter.MoveNext())
@@ -409,14 +398,14 @@ namespace SCMApp {
     private string GetCommitMessageFromFirst() {
       var commits = new EnumerableType<Commit>(Repo.Commits.GetEnumerator());
       var lastCommit = commits.First();
-      return lastCommit?.Message;
+      return lastCommit?.Message ?? string.Empty;
     }
 
     private bool HasCommitLogChanged() {
-      var rMsg = GetCommitMessageFromFirst();
+      string rMsg = GetCommitMessageFromFirst();
 
       // Logger Verbose
-      if (rMsg == null || rMsg == string.Empty)
+      if (rMsg == string.Empty)
         Console.WriteLine("failed to retrieve commit message!");
 
       var lMsg = GetCommitMessage();
@@ -463,8 +452,6 @@ namespace SCMApp {
         return true;
       };
 
-      // Config is not instantiated if commit was not called
-      InstantiateJsonConfig();
       var options = new PushOptions() {
           CredentialsProvider = Config.GetCredentials(),
           OnPushStatusError = OnPushStatusError,
@@ -580,9 +567,6 @@ namespace SCMApp {
 
       var formatSpecDelRBranch = ":{0}";
       var pushRefSpec = string.Format(formatSpecDelRBranch, Repo.Branches[branchName].CanonicalName);
-
-      // instantiate config
-      InstantiateJsonConfig();
       var options = new PushOptions() { CredentialsProvider = Config.GetCredentials() };
 
       Repo.Network.Push(Repo.Network.Remotes["origin"], pushRefSpec, options);

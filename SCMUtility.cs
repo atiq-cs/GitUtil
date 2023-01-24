@@ -112,6 +112,9 @@ namespace SCMApp {
     }
 
 
+    /// <summary>
+    /// Show git config info and show all remotes
+    /// </summary>
     public void ShowRepoAndUserInfo() {
       Console.WriteLine("Local Repo: " + GetRepoPath());
       // or, GetValueOrDefault<string>
@@ -129,6 +132,21 @@ namespace SCMApp {
         Console.WriteLine("Author: " + username);
         email = Repo.Config.Get<string>("user.email", ConfigurationLevel.Global).Value;
         Console.WriteLine("Email: " + email);
+      }
+
+      // ref: 'LibGit2Sharp.Tests/RemoteFixture.cs'
+      Console.WriteLine();
+
+      int count = 0;
+      foreach (Remote remote in Repo.Network.Remotes)
+          count++;
+      Console.WriteLine(count + " remotes found.");
+
+      foreach (Remote remote in Repo.Network.Remotes)
+      {
+          Console.WriteLine(remote.Name);
+          Console.WriteLine(" URL: " + remote.Url);
+          Console.WriteLine(" Push Url: " + remote.PushUrl);
       }
     }
 

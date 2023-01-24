@@ -33,9 +33,12 @@ namespace SCMApp {
     /// <param name="fullNameFromRepo">Full Name in Repo Config</param>
     /// <param name="emailFromRepo">Email Address in Repo Config</param>
     /// <param name="repoPath">Repository Dir/Path</param>
-    public JsonConfig(string fullNameFromRepo, string emailFromRepo, string repoPath) {
-      JsonConfigFilePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
-        + @"\GitUtilConfig.json";
+    public JsonConfig(string jsonConfigurationFilePath, string fullNameFromRepo, string emailFromRepo, string repoPath) {
+      JsonConfigFilePath = jsonConfigurationFilePath;
+
+      if (JsonConfigFilePath == string.Empty)
+        JsonConfigFilePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+          + @"\GitUtilConfig.json";
 
       if (!System.IO.File.Exists(JsonConfigFilePath)) {
         throw new InvalidOperationException($"Required config: {JsonConfigFilePath} not found!" + 

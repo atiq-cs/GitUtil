@@ -4,7 +4,6 @@
 namespace SCMApp {
   using System;
   using LibGit2Sharp;
-  using System.Threading.Tasks;
 
   /// <summary> Source Control Manager Application
   /// This name coz we might wanna support other version control systems in future
@@ -19,7 +18,7 @@ namespace SCMApp {
     /// </see>
     /// </summary>
     public enum SCMAction {
-      PushModified,
+      Push,   // push modified / push single / push all
       UpdateRemote,
       DeleteBranch,
       ShowInfo,
@@ -44,11 +43,11 @@ namespace SCMApp {
     /// </summary>
     private bool RepoInitStage { get; set; }
 
-    public GitUtility(SCMAction action, string repoPath, string filePath) {
+    public GitUtility(SCMAction action, string repoPath, string jsonConfigurationFilePath) {
       if (string.IsNullOrEmpty(repoPath))
         repoPath = System.IO.Directory.GetCurrentDirectory();
       else if (! System.IO.Directory.Exists(repoPath))
-        throw new ArgumentException("Provide repository path does not exist!");
+        throw new ArgumentException("Provided repository directory path does not exist!");
 
       try {
         Repo = new Repository(repoPath);
@@ -77,7 +76,7 @@ namespace SCMApp {
       }
  
       Action = action;
-      Config = new JsonConfig(Repo.Config.Get<string>("user.name").Value, Repo.Config.
+      Config = new JsonConfig(jsonConfigurationFilePath, Repo.Config.Get<string>("user.name").Value, Repo.Config.
         Get<string>("user.email").Value, GetRepoPath());
     }
 
@@ -263,7 +262,7 @@ namespace SCMApp {
       case StageType.Single:
         if (string.IsNullOrEmpty(filePath) == false)
         {
-          var repoPath = GetRepoPath();
+          var repoPath = GetRepoPath();  
           // Get relative path of the dir
           if (filePath.StartsWith(repoPath))
             filePath = filePath.Substring(repoPath.Length + 1);
@@ -437,6 +436,11 @@ namespace SCMApp {
     /// </remarks>
     /// </summary>
     private void PushToRemote(bool shouldForce = false) {
+      if (RepoInitStage) {
+        Console.WriteLine("Repo initialized. Please set remote origin and push again.");
+        return ;
+      }
+
       var targetBranch = Repo.Head.FriendlyName;
       // Use Logger Verbose
       var originBranchStr = "origin/" + targetBranch;
@@ -500,34 +504,45 @@ namespace SCMApp {
     }
 
     /// <summary>
-    /// Wire the cases to methodologically call Stage()
-    /// </summary>
-    private bool StageHelper(string filePath) {
-      if (string.IsNullOrEmpty(filePath))
-        return Stage(StageType.Update, string.Empty);
-      if (filePath == "__cmdOption:--all")
-        return Stage(StageType.All, string.Empty);
-      return Stage(StageType.Single, filePath);
-    }
-
-    /// <summary>
-    /// SCP - Stage, Commit and Push
+    /// SCP - Stage, Commit and Push Modified/All
     /// </summary>
     /// <param name="filePath">file path passed with 'push single', Empty otherwise</param>
     /// <param name="shouldAmend">amend commit and force push</param>
-    public void SCPChanges(string filePath, bool shouldAmend = false) {
-      var isMod = StageHelper(filePath);
+    public void SCPChanges(StageType pushType, bool shouldAmend = false) {
+      var isMod = false;
+
+      switch (pushType) {
+      case StageType.Update:
+        isMod = Stage(StageType.Update, string.Empty);
+        break;
+      case StageType.All:
+        isMod = Stage(StageType.All, string.Empty);;
+        break;
+      default:
+        throw new ArgumentException("Unexpected stage type!");
+      }
+
       if (isMod)
         Console.WriteLine("changes staged");
 
       if (isMod || (shouldAmend && HasCommitLogChanged()))
         Commit(shouldAmend);
         
-      if (RepoInitStage) {
-        Console.WriteLine("Repo initialized. Please set remote origin and push again.");
-      }
-      else
-        PushToRemote(shouldForce: shouldAmend);
+      PushToRemote(shouldForce: shouldAmend);
+    }
+
+    /// <summary>
+    /// SCP - Stage, Commit and Push Single File
+    /// </summary>
+    public void SCPSingleChange(string filePath, bool shouldAmend = false) {
+      var isMod = Stage(StageType.Single, filePath);
+      if (isMod)
+        Console.WriteLine("changes staged");
+
+      if (isMod || (shouldAmend && HasCommitLogChanged()))
+        Commit(shouldAmend);
+
+      PushToRemote(shouldForce: shouldAmend);
     }
 
     /// <summary>

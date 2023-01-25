@@ -75,17 +75,7 @@ namespace SCMApp {
       });
       rootCmd.AddCommand(setUrlCmd);
 
-      // DeleteBranch: branch name
-      var delBrCmd = new Command("delete-branch", "Delete branch from local and remote.");
-      delBrCmd.AddArgument(new Argument<string>("branchName"));
-
-      delBrCmd.Handler = CommandHandler
-        .Create<string, string, string>((branchName, repodir, configfilepath) =>
-      {
-        var app = new GitUtility(GitUtility.SCMAction.DeleteBranch, ValidateRepoDir(repodir), (configfilepath is null? string.Empty : configfilepath));
-        app.DeleteBranch(branchName);
-      });
-      rootCmd.AddCommand(delBrCmd);
+      rootCmd.AddCommand(GetBranchCmd());
 
       await rootCmd.InvokeAsync(args);
     }
@@ -167,6 +157,53 @@ namespace SCMApp {
         app.PullChanges(upstream);
       });
       return pullCmd;
+    }
+
+    /// <summary>
+    /// Implements the "branch" command
+    ///  with options to,
+    /// - deletes a branch
+    /// - renames a branch
+    /// </summary>
+    /// <returns>The "branch" Command</returns>
+    private Command GetBranchCmd() {
+      // DeleteBranch: branch name
+      var branchCmd = new Command("branch", "Delete branch from local and remote.");
+      // delBrCmd.AddArgument(new Argument<string>("branchName"));
+      var deleteOption = new Option<string>(new[] {"--delete", "-d"}, "Delete branch from local "+
+        "and remote.");
+      branchCmd.AddOption(deleteOption);
+      var renameOption = new Option<string>(new[] {"--rename", "-r"}, "Rename branch from local "+
+        "and remote.");
+      branchCmd.AddOption(renameOption);
+
+
+      branchCmd.Handler = CommandHandler
+        .Create<string, string, string, string>((delete, rename, repodir, configfilepath) =>
+      {
+        if (delete is not null && rename is not null)
+          throw new System.ArgumentException("Delete and rename are mutually exclusive arguments!");
+
+        if (delete is not null) {
+          if (delete == string.Empty)
+            throw new System.ArgumentException("Branch name (argument for --delete) is missing!");
+
+          var branchName = delete;
+          var app = new GitUtility(GitUtility.SCMAction.Branch, ValidateRepoDir(repodir), (configfilepath is null? string.Empty : configfilepath));
+          app.DeleteBranch(branchName);
+        }
+
+        if (rename is not null) {
+          if (rename == string.Empty)
+            throw new System.ArgumentException("Branch name (argument for --rename) to rename to is missing!");
+
+          var branchName = rename;
+          var app = new GitUtility(GitUtility.SCMAction.Branch, ValidateRepoDir(repodir), (configfilepath is null? string.Empty : configfilepath));
+          app.RenameBranch(branchName);
+        }
+      });
+
+      return branchCmd;
     }
 
     private string ValidateRepoDir(string repoDir) {

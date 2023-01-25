@@ -20,7 +20,7 @@ namespace SCMApp {
     public enum SCMAction {
       Push,   // push modified / push single / push all
       UpdateRemote,
-      DeleteBranch,
+      Branch,
       ShowInfo,
       ShowStatus,
       Pull
@@ -362,8 +362,9 @@ namespace SCMApp {
 
       // Use Logger Verbose
       Console.WriteLine("committed with amend flag: " + shouldAmend);
-      Console.WriteLine("and message:" + Environment.NewLine
-        + GetCommitMessage(singleLine: true) + Environment.NewLine);
+      Console.WriteLine("and message:");
+      Console.WriteLine(' ' + GetCommitMessage(singleLine: true));
+      Console.WriteLine("..." + Environment.NewLine);
 
       // Test this with an initialized repo (no commits)
       //  ref, https://github.com/libgit2/libgit2sharp/issues/802
@@ -459,18 +460,16 @@ namespace SCMApp {
         return ;
       }
 
-      var targetBranch = Repo.Head.FriendlyName;
+      var currentBranch = GetCurrentBranch();
       // Use Logger Verbose
-      var originBranchStr = "origin/" + targetBranch;
-      Console.WriteLine("origin branch string: " + originBranchStr + " does Remote Origin Target " +
-        "Branch Exist: " + (Repo.Branches[originBranchStr] != null));
+      var originBranchStr = "origin/" + currentBranch?.FriendlyName;
 
       // Example output, Q: What's counting?
       // Counting 1 0
       // Deltafying 0 3
       // Deltafying 3 3
       LibGit2Sharp.Handlers.PackBuilderProgressHandler packBuilderCb = (x, y, z) => {
-        Console.WriteLine($"{x} {y} {z}");
+        Console.Write($"{x} {y} {z}\r");
         return true;
       };
 
@@ -483,16 +482,21 @@ namespace SCMApp {
       try {
         var formatSpec = (shouldForce || Repo.Branches[originBranchStr] == null)? "+{0}:{0}" : "{0}";
         var pushRefSpec = string.Format(formatSpec, Repo.Head.CanonicalName);
-        Console.WriteLine("refSpec: " + pushRefSpec);
 
         var remote = Repo.Network.Remotes["origin"];
         if (remote == null) {
           Console.WriteLine("Exception: Remote origin not found! Try running with set-url argument.");
           throw new LibGit2SharpException("Remote origin not found!");
         }
-        Console.WriteLine("remote name: " + remote.Name);
 
-        Repo.Network.Push(remote, pushRefSpec, options);
+        if (shouldForce) {
+          Console.WriteLine("Pushing new remote branch (or rewriting an old branch): " + currentBranch?.FriendlyName);
+          Repo.Network.Push(remote, pushRefSpec, options);
+        }
+        else {
+          Console.WriteLine("Pushing branch: " + currentBranch?.FriendlyName);
+          Repo.Network.Push(currentBranch, options);
+        }
       }
       catch (System.NullReferenceException) {
         Console.WriteLine("Unexpected, since branch is not hardcoded!");
@@ -505,9 +509,7 @@ namespace SCMApp {
       }
       catch(LibGit2SharpException e) {
         Console.WriteLine("Exception: {0}", e.Message + (e.InnerException != null ? " / " + e.InnerException.Message : ""));
-
-        // stuffs to help debugging
-        Console.WriteLine("Canonical name: " + Repo.Branches[targetBranch].CanonicalName);
+        Console.WriteLine("Canonical name: " + currentBranch?.CanonicalName);
 
         var remote = Repo.Network.Remotes["origin"];
         Console.WriteLine("URL: " + remote.Url);
@@ -584,29 +586,96 @@ namespace SCMApp {
 
     /// <summary>
     /// Delete specified branch from local and remote
-    ///  Use the Push Refspec till API support for remote deletion is found
+    ///  Use the Push Refspec (till API support for remote deletion is found)
     ///
-    /// - push ref spec primary attribution,
+    /// - ref for push ref spec,
     ///  <see href="https://git-scm.com/book/en/v2/Git-Internals-The-Refspec">Git Refspec</see>
     /// </summary>
     /// <param name="branchName">branch name</param>
-    public void DeleteBranch(string branchName) {
-      if (Repo.Branches[branchName] == null) {
-        Console.WriteLine($"Branch {branchName} does not exist!");
-        return ;
-      }
+    public void DeleteBranch(string branchName, bool deleteRemoteOnly = false) {
 
       Console.WriteLine($"Branch {branchName}");
 
       var formatSpecDelRBranch = ":{0}";
-      var pushRefSpec = string.Format(formatSpecDelRBranch, Repo.Branches[branchName].CanonicalName);
+      var pushRefSpec = string.Format(formatSpecDelRBranch, "refs/heads/" + branchName);
       var options = new PushOptions() { CredentialsProvider = Config.GetCredentials() };
 
       Repo.Network.Push(Repo.Network.Remotes["origin"], pushRefSpec, options);
       Console.WriteLine("- removed from remote (NoOp if already removed)");
 
-      Repo.Branches.Remove(branchName, false);
-      Console.WriteLine("- removed from local");
+      if (deleteRemoteOnly == false) {
+        if (Repo.Branches[branchName] == null) {
+          Console.WriteLine($"Branch {branchName} does not exist!");
+          return ;
+        }
+        Repo.Branches.Remove(branchName, false);
+        Console.WriteLine("- removed from local");
+      }
+      else
+        Console.WriteLine("- not removed from local");
+    }
+
+
+    /// <summary>
+    /// Renames current branch to giveName
+    ///  - If it's a detached HEAD, ignore it
+    ///  Utilizes the Push Refspec to rename remote branch
+    /// </summary>
+    /// <param name="targetBranchName">branch name to rename to</param>
+    public void RenameBranch(string targetBranchName) {
+      if (Repo.Branches[targetBranchName] is not null) {
+        Console.WriteLine($"Branch {targetBranchName} already exists!");
+        return ;
+      }
+
+      var currentBranch = GetCurrentBranch();
+      Console.WriteLine($"Rename branch {currentBranch?.FriendlyName} -> {targetBranchName}");
+      // Renames local branch: can rename active local branch
+      Repo.Branches.Rename(currentBranch, targetBranchName);
+      // Create new remote branch with the new name (copy of old branch but with new name)
+      PushToRemote(shouldForce: true);
+
+      Console.WriteLine();
+      Console.WriteLine();
+      Console.WriteLine("Renaming remote branch creates a new branch copying the old one.");
+      Console.WriteLine("Please change active branch on remote (the branch with with the new name");
+      Console.WriteLine("i.e., on GitHub to proceed with deletion of old branch.");
+      Console.WriteLine(" GitHub URL looks like: https://github.com/user_name/repository_name/settings/branches");
+      Console.WriteLine("Done with the change yet? Press Y if affirmative.");
+
+      string response = Console.ReadLine()?? string.Empty;
+      if (response != "y" && response != "Y")
+        return ;
+
+      // delete the original branch from remote keeping only the new one with the new name
+      DeleteBranch(currentBranch?.FriendlyName?? "PlaceHolderBranchNameToAvoidWarning", deleteRemoteOnly: true);
+    }
+
+    /// <summary>
+    /// Get currently active branch
+    ///  the branch that is set as repository head
+    /// </summary>
+    /// <returns>Single Active Branch Object</returns>
+    public Branch? GetCurrentBranch() {
+      if (Repo.Info.IsHeadDetached)
+        throw new InvalidOperationException("Head is detached! Ignoring Branch operation and throwing instead..");
+
+      int count = 0;
+      Branch? currentBranch = null;
+      foreach( var branch in Repo.Branches)
+        if (branch.IsCurrentRepositoryHead) {
+          count++;
+          currentBranch = branch;
+        }
+
+      if (count > 1)
+        throw new System.ArgumentException("Multiple branches point to Head. Please specify source branch name to rename to!");
+      else if (count == 0)
+        throw new InvalidOperationException("An active branch could not be found!");
+      else if (currentBranch == null)
+        throw new NullReferenceException("Unexpected null reference as current branch!");
+
+      return currentBranch;
     }
   }
 }

@@ -89,6 +89,7 @@ namespace SCMApp {
         Console.WriteLine("Head doesn't exist yet! Yet to do a first commit and create branch?");
         return string.Empty;
       }
+
       return Repo.Head.Tip.Id.ToString().Substring(0, 9); 
     }
 
@@ -352,16 +353,19 @@ namespace SCMApp {
     /// <see href="LibGit2Sharp.Tests/CommitFixture.cs">LibGit2Sharp CommitFixture Tests</see>
     /// </summary>
     private void Commit(bool shouldAmend = false) {
+      Console.WriteLine("Current HEAD at: " + GetShaShort() + (shouldAmend? " (being rewritten!)":
+        string.Empty));
+
       Signature signature = Repo.Config.BuildSignature(DateTimeOffset.Now);
 
       // Commit to local repository
-      Console.WriteLine("author name: " + signature.Name);
+      Console.WriteLine("Commit author name: " + signature.Name);
+      Console.WriteLine("Commit author email: " + signature.Email);
 
       Commit commit = Repo.Commit(GetCommitMessage(), signature, signature,
         new CommitOptions { AmendPreviousCommit = shouldAmend });
 
-      // Use Logger Verbose
-      Console.WriteLine("committed with amend flag: " + shouldAmend);
+      // TODO: Use Logger Verbose to display addition inf
       Console.WriteLine("and message:");
       Console.WriteLine(' ' + GetCommitMessage(singleLine: true));
       Console.WriteLine("..." + Environment.NewLine);
@@ -469,7 +473,11 @@ namespace SCMApp {
       // Deltafying 0 3
       // Deltafying 3 3
       LibGit2Sharp.Handlers.PackBuilderProgressHandler packBuilderCb = (x, y, z) => {
-        Console.Write($"{x} {y} {z}\r");
+        if (z == 0)
+          Console.Write($" {x} 0%\r");
+        else
+          Console.Write($" {x} {y * 100 / z}%\r");
+
         return true;
       };
 
@@ -489,13 +497,16 @@ namespace SCMApp {
           throw new LibGit2SharpException("Remote origin not found!");
         }
 
+        Console.WriteLine("Push progress:");
         if (shouldForce) {
-          Console.WriteLine("Pushing new remote branch (or rewriting an old branch): " + currentBranch?.FriendlyName);
           Repo.Network.Push(remote, pushRefSpec, options);
+          Console.WriteLine(Environment.NewLine);
+          Console.Write("Pushed new remote branch (or rewritten an old branch): " + currentBranch?.FriendlyName);
         }
         else {
-          Console.WriteLine("Pushing branch: " + currentBranch?.FriendlyName);
           Repo.Network.Push(currentBranch, options);
+          Console.WriteLine(Environment.NewLine);
+          Console.Write("Pushed branch: " + currentBranch?.FriendlyName);
         }
       }
       catch (System.NullReferenceException) {
@@ -520,7 +531,7 @@ namespace SCMApp {
           Console.WriteLine("Exception: {0}", ex.Message + (ex.InnerException != null ? " / " + ex.InnerException.Message : ""));
       }
 
-      Console.Write("pushed" + (shouldForce? " (forced) " : " ") + "-> " + GetShaShort());
+      Console.WriteLine((shouldForce? " (forced) " : " ") + "-> " + GetShaShort() + '.');
     }
 
     /// <summary>
@@ -543,7 +554,7 @@ namespace SCMApp {
       }
 
       if (isMod)
-        Console.WriteLine("changes staged");
+        Console.WriteLine("Above changes are staged." + Environment.NewLine);
 
       if (isMod || (shouldAmend && HasCommitLogChanged()))
         Commit(shouldAmend);

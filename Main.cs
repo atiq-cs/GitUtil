@@ -6,6 +6,19 @@ namespace SCMApp {
   using System.CommandLine;
   using System.CommandLine.NamingConventionBinder;
 
+  /// <summary> Explanation of namespace name:
+  /// Elaboration: Source Control Manager Application
+  /// This name coz we might wanna support other version control systems in future
+  ///
+  /// And, below line `NamespaceDoc` is to support this on XML documentation
+  /// </summary>
+  /// <remarks>
+  /// ref, <see href="https://stackoverflow.com/questions/793210/xml-documentation-for-a-namespace">
+  ///   SO - C# XML Documentation Website Link</see>
+  /// </remarks>
+  internal static class NamespaceDoc { }
+
+
   class SCMAppMain {
     /// <summary>
     /// Entry Point
@@ -76,6 +89,7 @@ namespace SCMApp {
       rootCmd.AddCommand(setUrlCmd);
 
       rootCmd.AddCommand(GetBranchCmd());
+      rootCmd.AddCommand(GetRebaseCmd());
 
       await rootCmd.InvokeAsync(args);
     }
@@ -167,9 +181,7 @@ namespace SCMApp {
     /// </summary>
     /// <returns>The "branch" Command</returns>
     private Command GetBranchCmd() {
-      // DeleteBranch: branch name
       var branchCmd = new Command("branch", "Delete branch from local and remote.");
-      // delBrCmd.AddArgument(new Argument<string>("branchName"));
       var deleteOption = new Option<string>(new[] {"--delete", "-d"}, "Delete branch from local "+
         "and remote.");
       branchCmd.AddOption(deleteOption);
@@ -205,6 +217,39 @@ namespace SCMApp {
 
       return branchCmd;
     }
+
+
+    /// <summary>
+    /// Implements the "rebase" command
+    ///  with options to,
+    /// - amend author for commits when it matches author email
+    /// - ...
+    /// </summary>
+    /// <returns>The "branch" Command</returns>
+    private Command GetRebaseCmd() {
+      var rebaseCmd = new Command("rebase", "Delete branch from local and remote.");
+      /* var deleteOption = new Option<string>(new[] {"--delete", "-d"}, "Delete branch from local "+
+        "and remote.");
+      rebaseCmd.AddOption(deleteOption); */
+
+      rebaseCmd.Handler = CommandHandler
+        .Create<string, string>((repodir, configfilepath) =>
+      {
+        /* if (delete is not null && rename is not null)
+          throw new System.ArgumentException("Delete and rename are mutually exclusive arguments!");
+
+        if (delete is not null) {
+          if (delete == string.Empty)
+            throw new System.ArgumentException("Branch name (argument for --delete) is missing!");  */
+
+          // var branchName = delete;
+          var app = new GitUtility(GitUtility.SCMAction.Rebase, ValidateRepoDir(repodir), (configfilepath is null? string.Empty : configfilepath));
+          app.AmendAuthor();
+      });
+
+      return rebaseCmd;
+    }
+
 
     private string ValidateRepoDir(string repoDir) {
         var repoPath = ".";

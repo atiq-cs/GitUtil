@@ -5,11 +5,6 @@ namespace SCMApp {
   using System;
   using LibGit2Sharp;
 
-  /// <summary> Source Control Manager Application
-  /// This name coz we might wanna support other version control systems in future
-  /// </summary>
-  internal static class NamespaceDoc { }
-
   internal class GitUtility {
     /// <summary>
     /// Action representing sequence of git commands
@@ -23,7 +18,8 @@ namespace SCMApp {
       Branch,
       ShowInfo,
       ShowStatus,
-      Pull
+      Pull,
+      Rebase
     };
 
     /// <summary>
@@ -646,6 +642,7 @@ namespace SCMApp {
       // Create new remote branch with the new name (copy of old branch but with new name)
       PushToRemote(shouldForce: true);
 
+
       Console.WriteLine();
       Console.WriteLine();
       Console.WriteLine("Renaming remote branch creates a new branch copying the old one.");
@@ -661,6 +658,17 @@ namespace SCMApp {
       // delete the original branch from remote keeping only the new one with the new name
       DeleteBranch(currentBranch?.FriendlyName?? "PlaceHolderBranchNameToAvoidWarning", deleteRemoteOnly: true);
     }
+
+    /// <summary>
+    /// Rebase
+    ///  - Related to RewriteHistory
+    ///  Utilize a new class to separate out Linq consumers
+    /// </summary>
+    /// <param name="param-to-add">TODO</param>
+    public void AmendAuthor() {
+      throw new NotImplementedException();
+    }
+
 
     /// <summary>
     /// Get currently active branch

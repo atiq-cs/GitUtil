@@ -291,11 +291,27 @@ namespace SCMApp {
           }
         }
 
-        var isDir = System.IO.Directory.Exists(filePath);
-        if (System.IO.File.Exists(filePath) || isDir) {
-          Console.WriteLine((isDir? "* d " : "* ") + filePath);
+        if (System.IO.Directory.Exists(filePath)) {
+          var dirPath = filePath;
+          Console.WriteLine("d " + filePath);
+
+          string[] fileEntries = System.IO.Directory.GetFiles(dirPath);
+
+          // Stage all files found inside the directory, TODO: recurse
+          foreach (string fileName in fileEntries) {
+             var sPath = fileName.Substring(dirPath.Length + 1);
+            Console.WriteLine(" * " + sPath);
+
+            Repo.Index.Add(fileName);
+
+            if (!isModified)
+              isModified = true;
+          }
+        }
+        else if (System.IO.File.Exists(filePath)) {
+          Console.WriteLine("* " + filePath);
+
           Repo.Index.Add(filePath);
-          Repo.Index.Write();
           isModified = true;
         }
         else // Logger Verbose
@@ -305,13 +321,10 @@ namespace SCMApp {
       case StageType.Update:
         foreach (var item in Repo.RetrieveStatus(statusOps)) {
             // Stage file if it's modified
-            if (item.State == FileStatus.ModifiedInWorkdir)
+            if (item.State == FileStatus.ModifiedInWorkdir && System.IO.File.Exists(item.FilePath))
             {
-              if (System.IO.File.Exists(item.FilePath)) {
-                Console.WriteLine("* " + item.FilePath);
-                Repo.Index.Add(item.FilePath);
-                Repo.Index.Write();
-              }
+              Console.WriteLine("* " + item.FilePath);
+              Repo.Index.Add(item.FilePath);
 
               if (!isModified)
                 isModified = true;
@@ -321,21 +334,23 @@ namespace SCMApp {
       
       case StageType.All:
         foreach (var item in Repo.RetrieveStatus(statusOps)) {
-            // Stage any file found
-            if (System.IO.File.Exists(item.FilePath)) {
-              Console.WriteLine("* " + item.FilePath);
-              Repo.Index.Add(item.FilePath);
-              Repo.Index.Write();
-            }
+          // Stage any file found
+          if (System.IO.File.Exists(item.FilePath)) {
+            Console.WriteLine("* " + item.FilePath);
+            Repo.Index.Add(item.FilePath);
 
             if (!isModified)
               isModified = true;
+          }
         }
         break;
 
       default:
         break;
       }
+
+      if (isModified)
+            Repo.Index.Write();
 
       return isModified;
     }
@@ -378,17 +393,17 @@ namespace SCMApp {
         // branch = Repo.Branches.Add("dev", commit);
         branch = Repo.Branches.Rename("master", "dev");
         // Update the HEAD reference to point to the latest commit
-        // Repo.Refs.UpdateTarget(Repo.Refs.Head, branch);
+        Repo.Refs.UpdateTarget(Repo.Refs.Head, branch.CanonicalName);
 
       }
       else if (branch == null) {
         Console.WriteLine("Branch init for git!");
-        // should trigger right after a 'git init'
+        // should trigger right after a 'git init', smae comment? Hence, need to test
         // doesn't apply to LibGit2Sharp's Init which creates a master branch
         branch = Repo.Branches.Add("dev", commit);
         // TODO: change it to set active branch
         // Update the HEAD reference to point to the latest commit
-        // Repo.Refs.UpdateTarget(Repo.Refs.Head, commit.Id);
+        Repo.Refs.UpdateTarget(Repo.Refs.Head, branch.CanonicalName);
       }
     }
 
@@ -638,18 +653,23 @@ namespace SCMApp {
       var currentBranch = GetCurrentBranch();
       Console.WriteLine($"Rename branch {currentBranch?.FriendlyName} -> {targetBranchName}");
       // Renames local branch: can rename active local branch
-      Repo.Branches.Rename(currentBranch, targetBranchName);
+      var newBranch = Repo.Branches.Rename(currentBranch, targetBranchName);
       // Create new remote branch with the new name (copy of old branch but with new name)
       PushToRemote(shouldForce: true);
 
+      // Update tracked branch, otherwise push goes to old remote branch
+      string trackedBranchName = "refs/remotes/origin/" + newBranch.FriendlyName;
+      Repo.Branches.Update(newBranch,
+                    b => b.TrackedBranch = trackedBranchName);
 
       Console.WriteLine();
+      Console.Write("Renaming remote branch creates a new branch copying the old one. ");
+      Console.Write("Please change active branch on remote to the branch with with the new name ");
+      Console.WriteLine("i.e., on GitHub site.");
+      Console.WriteLine("GitHub URL to set active default branch looks like:");
+      Console.WriteLine("  https://github.com/user_name/repository_name/settings/branches");
       Console.WriteLine();
-      Console.WriteLine("Renaming remote branch creates a new branch copying the old one.");
-      Console.WriteLine("Please change active branch on remote (the branch with with the new name");
-      Console.WriteLine("i.e., on GitHub to proceed with deletion of old branch.");
-      Console.WriteLine(" GitHub URL looks like: https://github.com/user_name/repository_name/settings/branches");
-      Console.WriteLine("Done with the change yet? Press Y if affirmative.");
+      Console.WriteLine("Done with the change yet? Please press Y if affirmative.");
 
       string response = Console.ReadLine()?? string.Empty;
       if (response != "y" && response != "Y")
@@ -665,8 +685,9 @@ namespace SCMApp {
     ///  Utilize a new class to separate out Linq consumers
     /// </summary>
     /// <param name="param-to-add">TODO</param>
-    public void AmendAuthor() {
-      throw new NotImplementedException();
+    public void AmendAuthor(string name, string email) {
+      var rewriter = new Rewriter();
+      rewriter.AmendAuthor(name, email, Repo);
     }
 
 

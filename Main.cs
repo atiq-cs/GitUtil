@@ -185,13 +185,16 @@ namespace SCMApp {
       var deleteOption = new Option<string>(new[] {"--delete", "-d"}, "Delete branch from local "+
         "and remote.");
       branchCmd.AddOption(deleteOption);
+      var remoteOnlyOption = new Option<string>(new[] {"--remoteOnly"}, "Delete branch from "+
+        "remote only.");
+      branchCmd.AddOption(remoteOnlyOption);
       var renameOption = new Option<string>(new[] {"--rename", "-r"}, "Rename branch from local "+
         "and remote.");
       branchCmd.AddOption(renameOption);
 
 
       branchCmd.Handler = CommandHandler
-        .Create<string, string, string, string>((delete, rename, repodir, configfilepath) =>
+        .Create<string, string, bool, string, string>((delete, rename, remoteOnly, repodir, configfilepath) =>
       {
         if (delete is not null && rename is not null)
           throw new System.ArgumentException("Delete and rename are mutually exclusive arguments!");
@@ -200,12 +203,20 @@ namespace SCMApp {
           if (delete == string.Empty)
             throw new System.ArgumentException("Branch name (argument for --delete) is missing!");
 
+          System.Console.WriteLine("remote only flag: " + remoteOnly);
+
+          // if (remoteOnly is null)
+          //   remoteOnly = false;
+
           var branchName = delete;
           var app = new GitUtility(GitUtility.SCMAction.Branch, ValidateRepoDir(repodir), (configfilepath is null? string.Empty : configfilepath));
-          app.DeleteBranch(branchName);
+          app.DeleteBranch(branchName, remoteOnly);
         }
 
         if (rename is not null) {
+          if (remoteOnly)
+            throw new System.ArgumentException("RremoteOnly is not supported with --rename yet!");
+
           if (rename == string.Empty)
             throw new System.ArgumentException("Branch name (argument for --rename) to rename to is missing!");
 
@@ -227,24 +238,21 @@ namespace SCMApp {
     /// </summary>
     /// <returns>The "branch" Command</returns>
     private Command GetRebaseCmd() {
-      var rebaseCmd = new Command("rebase", "Delete branch from local and remote.");
-      /* var deleteOption = new Option<string>(new[] {"--delete", "-d"}, "Delete branch from local "+
-        "and remote.");
-      rebaseCmd.AddOption(deleteOption); */
+      var rebaseCmd = new Command("rebase", "Rebase command to perform rewrite history i.e., amend author / committer.");
+      var nameOption = new Option<string>(new[] {"--name", "-n"}, "Name of  author / committer.");
+      rebaseCmd.AddOption(nameOption);
+
+      var emailOption = new Option<string>(new[] {"--email", "-e"}, "Email of author / committer.");
+      rebaseCmd.AddOption(emailOption);
 
       rebaseCmd.Handler = CommandHandler
-        .Create<string, string>((repodir, configfilepath) =>
+        .Create<string, string, string, string>((name, email, repodir, configfilepath) =>
       {
-        /* if (delete is not null && rename is not null)
-          throw new System.ArgumentException("Delete and rename are mutually exclusive arguments!");
+        if (name is null && email is null)
+          throw new System.ArgumentException("Name and Email address both cannot be empty!");
 
-        if (delete is not null) {
-          if (delete == string.Empty)
-            throw new System.ArgumentException("Branch name (argument for --delete) is missing!");  */
-
-          // var branchName = delete;
           var app = new GitUtility(GitUtility.SCMAction.Rebase, ValidateRepoDir(repodir), (configfilepath is null? string.Empty : configfilepath));
-          app.AmendAuthor();
+          app.AmendAuthor(name??string.Empty, email??string.Empty);
       });
 
       return rebaseCmd;

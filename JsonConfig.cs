@@ -71,7 +71,6 @@ namespace SCMApp {
                 UserCred.UserName = SCAccount.Key;
 
                 // Print selected user to help finding duplicate Dir Entries, in case they exist
-                Console.WriteLine($"Selected account: {UserCred.UserName}");
 
                 UserCred.GithubToken = SCAccount.Value.GetProperty("GithubToken").GetString() ?? string.Empty;
                 UserCred.Email = SCAccount.Value.GetProperty("Email").GetString() ?? string.Empty;
@@ -105,6 +104,8 @@ namespace SCMApp {
 
         UserCred.SCProvider = defaultSCProvider;
       }
+      
+      Console.WriteLine($"Selected account: {UserCred.UserName}");
 
       if (fullNameFromRepo != UserCred.FullName || emailFromRepo != UserCred.Email)
         throw new InvalidOperationException("Inavlid user name or email in git config!");
